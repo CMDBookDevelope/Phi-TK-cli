@@ -1,7 +1,7 @@
 # Phi TK CLI Edition
 ![Winamin最強! Winamin最高!](arts/phi-tk-clilogo.png) 
 
-Phi-TK 是一个基于 Tauri + Vue 3 的谱面渲染工具。<img src="https://rust-lang.org/static/images/rust-logo-blk.svg" width="50" height="50" /><img src="[https://rust-lang.org/static/images/rust-logo-blk.svg](https://tauri.app/_astro/logo.BQPqkdSq.svg)" height="50" width="157.664"/>
+Phi-TK 是一个基于 Tauri + Vue 3 的谱面渲染工具。<img src="https://rust-lang.org/static/images/rust-logo-blk.svg" width="50" height="50" /><svg width="50" height="50" viewBox="0 0 432 137" fill="none" class="lp-tauri-logo dark"><path d="M85.76 49.92A13.1 13.1 0 0 1 72.62 63a13.1 13.1 0 0 1-13.14-13.08 13.1 13.1 0 0 1 13.14-13.07 13.1 13.1 0 0 1 13.14 13.07Z" fill="#FFC131"></path><path d="M63.74 86.66A13.1 13.1 0 0 1 50.6 99.73a13.1 13.1 0 0 1-13.15-13.07A13.1 13.1 0 0 1 50.6 73.58a13.1 13.1 0 0 1 13.14 13.08Z" fill="#24C8DB"></path><path d="M40.58 38.15C17.9 42.77.84 62.73.84 86.65c0 27.35 22.28 49.51 49.76 49.51a49.75 49.75 0 0 0 47.51-34.78 57.88 57.88 0 0 1-19.03 5.55A35.02 35.02 0 0 1 50.6 121.5a34.93 34.93 0 0 1-35.02-34.84 34.87 34.87 0 0 1 22.97-32.73 34.8 34.8 0 0 1 2.03-15.78Z" fill="#24C8DB"></path><path fill-rule="evenodd" clip-rule="evenodd" d="M82.64 98.43c22.67-4.61 39.74-24.58 39.74-48.5C122.38 22.57 100.1.41 72.62.41A49.75 49.75 0 0 0 25.11 35.2a57.87 57.87 0 0 1 19.03-5.55 35.03 35.03 0 0 1 28.48-14.57 34.93 34.93 0 0 1 35.02 34.84 34.87 34.87 0 0 1-22.97 32.73 34.8 34.8 0 0 1-2.03 15.78Z" fill="#FFC131"></path></svg>
 <!---![Rust小螃蟹好可爱wwwwwwww](https://rust-lang.org/static/images/rust-logo-blk.svg) ![Tauri何意味神秘图标](https://tauri.app/_astro/logo.BQPqkdSq.svg)--->
 Phi-TK CLI 是一个基于 Phi-TK Tauri部分的命令行渲染工具，不保证和 Phi-TK 一样多功能，也不保证和 Phi-TK 一样渲染效率
 *部分代码由AI编写/修改*
