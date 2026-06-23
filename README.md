@@ -72,7 +72,7 @@ phi-tk-cli # or wrapper.sh \
 --assets # assets folder [optional] \
 ```
 *摆烂了。。。申请查看源代码:*
-<details><summary>Rust。。。</summary><pre><code>pub struct CliArgs {
+<html><head><link href="prism.css" rel="stylesheet" /><script src="prism.js"></script></head><body><details><summary>Rust。。。</summary><pre><code class="language-rust">pub struct CliArgs {
     ///输入
     #[arg(short, long)]
     pub input: String,
@@ -108,7 +108,7 @@ phi-tk-cli # or wrapper.sh \
     /// 视频帧率（FPS），默认 30
     #[arg(long, default_value_t = 30)]
     pub fps: u32,
-}</code></pre></details>
+}</code></pre></details></body></html>
 
 
 ###首次运行###
