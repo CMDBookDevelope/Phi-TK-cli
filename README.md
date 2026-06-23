@@ -71,60 +71,45 @@ phi-tk-cli # or wrapper.sh \
 --finish # default=off result screen [optional] \
 --assets # assets folder [optional] \
 ```
-*摆烂了。。。申请查看源代码:*
-<html>
-  <head>
-      <link href="prism.css" rel="stylesheet" />
-      <script src="prism.js"></script>
-  </head>
-  <body>
-    <details>
-      <summary>Rust。。。</summary>
-      <pre>
-        <code class="language-rust">
-          pub struct CliArgs {
-            ///输入
-            #[arg(short, long)]
-            pub input: String,
-        
-            ///输出
-            #[arg(short, long, default_value = "output.mp4")]
-            pub output: String,
-        
-            ///分辨率
-            #[arg(short, long, default_value = "1920x1440")]
-            pub resolution: String,
-        
-            ///crf
-            #[arg(short, long, default_value_t = 20)]
-            pub crf: u32,
-        
-            //assets
-            #[clap(long, default_value = "/usr/lib/ptkc-assets")]
-            pub assets: String,
-        
-            /// 背景变暗程度，0-100，0 为全黑（默认 40）
-            #[arg(long, default_value_t = 40)]
-            pub dark: u8,
-        
-            /// 显示加载界面（默认隐藏）
-            #[arg(long, default_value_t = false)]
-            pub load: bool,
-        
-            /// 在视频末尾显示结算界面（默认不显示）
-            #[arg(long, default_value_t = false)]
-            pub finish: bool,
-        
-            /// 视频帧率（FPS），默认 30
-            #[arg(long, default_value_t = 30)]
-            pub fps: u32,
-          }
-        </code>
-      </pre>
-    </details>
-  </body>
-</html>
 
+*摆烂了。。。申请查看源代码:*<details><summary>Rust。。。</summary><pre><code>
+pub struct CliArgs {
+  ///输入
+  #[arg(short, long)]
+  pub input: String,
+  
+  ///输出
+  #[arg(short, long, default_value = "output.mp4")]
+  pub output: String,
+  
+  ///分辨率
+  #[arg(short, long, default_value = "1920x1440")]
+  pub resolution: String,
+  
+  ///crf
+  #[arg(short, long, default_value_t = 20)]
+  pub crf: u32,
+  
+  //assets
+  #[clap(long, default_value = "/usr/lib/ptkc-assets")]
+  pub assets: String,
+        
+  /// 背景变暗程度，0-100，0 为全黑（默认 40）
+  #[arg(long, default_value_t = 40)]
+  pub dark: u8,
+  
+  /// 显示加载界面（默认隐藏）
+  #[arg(long, default_value_t = false)]
+  pub load: bool,
+        
+  /// 在视频末尾显示结算界面（默认不显示）
+  #[arg(long, default_value_t = false)]
+  pub finish: bool,
+  
+  /// 视频帧率（FPS），默认 30
+  #[arg(long, default_value_t = 30)]
+  pub fps: u32,
+}</code></pre></details>
 
 ###首次运行###
 ```bash
