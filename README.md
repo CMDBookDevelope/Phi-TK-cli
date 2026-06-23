@@ -1,7 +1,7 @@
 # Phi TK CLI Edition
 ![Winamin最強! Winamin最高!](arts/phi-tk-clilogo.png) 
 
-Phi-TK 是一个基于 Tauri + Vue 3 的谱面渲染工具。<img src="https://rust-lang.org/static/images/rust-logo-blk.svg" width="50" height="50" /><img src="[https://rust-lang.org/static/images/rust-logo-blk.svg](https://tauri.app/_astro/logo.BQPqkdSq.svg)" height="50" />
+Phi-TK 是一个基于 Tauri + Vue 3 的谱面渲染工具。<img src="https://rust-lang.org/static/images/rust-logo-blk.svg" width="50" height="50" /><img src="[https://rust-lang.org/static/images/rust-logo-blk.svg](https://tauri.app/_astro/logo.BQPqkdSq.svg)" height="50" width="157.664"/>
 ![Rust小螃蟹好可爱wwwwwwww](https://rust-lang.org/static/images/rust-logo-blk.svg) ![Tauri何意味神秘图标](https://tauri.app/_astro/logo.BQPqkdSq.svg)
 Phi-TK CLI 是一个基于 Phi-TK Tauri部分的命令行渲染工具，不保证和 Phi-TK 一样多功能，也不保证和 Phi-TK 一样渲染效率
 *部分代码由AI编写/修改*
