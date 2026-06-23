@@ -1,5 +1,5 @@
 # Phi TK CLI Edition
-![render](arts/phi-tklogo.png) ![render](arts/phi-tkclilogo.png) 
+![render](arts/phi-tklogo.png) ![clirender](arts/phi-tk-clilogo.png) 
 
 Phi-TK 是一个基于 Tauri + Vue 3 的谱面渲染工具。
 Phi-TK CLI 是一个基于 Phi-TK 的命令行渲染工具，不保证和 Phi-TK 一样多功能，也不保证和 Phi-TK 一样渲染效率
