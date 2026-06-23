@@ -1,12 +1,11 @@
 [package]
-name = "Phi-TK"
-version = "2.0.1"
-description = "Phi-TK"
-authors = ["Mivik", "Link"]
-license = ""
-repository = ""
-default-run = "Phi-TK"
+name = "phi-tk-cli"
+version = "0.1.0"
 edition = "2021"
+
+[[bin]]
+name = "phi-tk-cli"
+path = "src/main.rs"
 rust-version = "1.60"
 
 [build-dependencies]
@@ -31,7 +30,7 @@ anyhow = { version = "1.0.70", features = ["backtrace"] }
 macroquad = { git = "https://github.com/Winamin/prpr-macroquad", default-features = false }
 prpr = { git = "https://github.com/Winamin/Phi-TK-render-lib", package = "prpr", branch = "render-lib" }
 
-# prpr = { path = "../../phira/prpr" }
+#prpr = { path = "./prpr" }
 
 sasa = { git = "https://github.com/Winamin/sasa" }
 #sasa = {path = "/home/link/sasa"}
@@ -50,9 +49,13 @@ tauri-plugin-os = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-http = "2"
+clap = { version = "4.5", features = ["derive"] }
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]
+
+#[patch.crates-io]
+#miniquad={path="./prpr-miniquad"}
 
 [profile.release]
 opt-level = 3
