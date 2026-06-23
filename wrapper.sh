@@ -60,6 +60,7 @@ if [ -z "${DISPLAY:-}" ]; then
     exit 1
   fi
 fi
+#INTERNET YAMERO MASTER 13 SSS 100.4523%
 
 export SDL_AUDIODRIVER="${SDL_AUDIODRIVER:-alsa}"
 export ALSA_PCM_NAME="${ALSA_PCM_NAME:-default}"
@@ -73,3 +74,4 @@ if [ -d "$DEFAULT_ASSETS" ] && ! has_arg "--assets" "$@"; then
 else
   "$REAL_BIN" "$@"
 fi
+#NEEDY GIRL OVERDOZE
