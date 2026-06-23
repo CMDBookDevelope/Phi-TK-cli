@@ -72,7 +72,7 @@ phi-tk-cli # or wrapper.sh \
 --assets # assets folder [optional] \
 ```
 
-*摆烂了。。。申请查看[源代码](src-tauri/src/render.rs#L1939 "Holy Shit...")*
+*摆烂了。。。申请查看[源代码](src-tauri/src/render.rs#L1939-1975 "1939工作室快让美芬死一死。")*
 
 ###首次运行###
 ```bash
