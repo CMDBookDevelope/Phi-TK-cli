@@ -92,21 +92,20 @@ pub async fn main() -> Result<()> {
     //let mut avg_fps = 0.0;
     'app: loop {
         let frame_start = tm.real_time();
-        if is_key_pressed(KeyCode::F11)
-        {
+        if is_key_pressed(KeyCode::F11) {
             is_fullscreen = !is_fullscreen;
             set_fullscreen(is_fullscreen);
         }
         main.update()?;
         main.render(&mut painter)?;
-        if main.should_exit()
-        { break 'app; }
+        if main.should_exit() {
+            break 'app;
+        }
         let t = tm.real_time();
         let frame_time = t - frame_start; // 当前帧耗时（秒）
-        // 存储帧时间
+                                          // 存储帧时间
         frame_times.push(frame_time);
-        if frame_times.len() > 100
-        {
+        if frame_times.len() > 100 {
             frame_times.remove(0);
         }
         // 计算平均帧时间

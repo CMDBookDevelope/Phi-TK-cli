@@ -1,17 +1,20 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 prpr::tl_file!("render");
 
-use crate::Path;
 use anyhow::{bail, Context, Result};
-use macroquad::{miniquad::{gl::{
-    GLuint, GL_RGBA, GL_UNSIGNED_BYTE, GL_READ_FRAMEBUFFER, GL_PIXEL_PACK_BUFFER,
-    GL_STREAM_READ, GL_MAP_READ_BIT, GL_MAP_UNSYNCHRONIZED_BIT,
-    GLsizeiptr, GLsizei, GLvoid,
-    glGenBuffers, glBindBuffer, glBufferData, glDeleteBuffers,
-    glViewport, glReadPixels, glReadBuffer,
-    glMapBufferRange, glUnmapBuffer,
-    GL_COLOR_ATTACHMENT0,glBindFramebuffer,GL_FRAMEBUFFER
-}, RenderPass as MQRenderPass}, prelude::*};
+use macroquad::{
+    miniquad::{
+        gl::{
+            glBindBuffer, glBindFramebuffer, glBufferData, glDeleteBuffers, glGenBuffers,
+            glMapBufferRange, glReadBuffer, glReadPixels, glUnmapBuffer, glViewport, GLsizei,
+            GLsizeiptr, GLuint, GLvoid, GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER, GL_MAP_READ_BIT,
+            GL_MAP_UNSYNCHRONIZED_BIT, GL_PIXEL_PACK_BUFFER, GL_READ_FRAMEBUFFER, GL_RGBA,
+            GL_STREAM_READ, GL_UNSIGNED_BYTE,
+        },
+        RenderPass as MQRenderPass,
+    },
+    prelude::*,
+};
 use prpr::{
     config::{ChallengeModeColor, Config, Mods},
     core::{internal_id, MSRenderTarget, NoteKind},
@@ -25,10 +28,11 @@ use prpr::{
 };
 use sasa::AudioClip;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::{
     cell::RefCell,
-    io::{BufRead, BufWriter, Write},
     ops::DerefMut,
+    io::{BufWriter, Write},
     path::PathBuf,
     process::{Command, Stdio},
     rc::Rc,
@@ -42,6 +46,7 @@ use tempfile::NamedTempFile;
 #[serde(rename_all = "camelCase")]
 #[serde(default)]
 pub struct RenderConfig {
+    pub codec: String,
     pub resolution: (u32, u32),
     pub ffmpeg_preset: String,
     pub ending_length: f64,
@@ -104,6 +109,7 @@ pub struct RenderConfig {
 impl Default for RenderConfig {
     fn default() -> Self {
         Self {
+            codec: "hevc_qsv".to_string(),
             resolution: (1920, 1080),
             ffmpeg_preset: "medium p4 balanced".to_string(),
             ending_length: -2.0,
@@ -114,11 +120,11 @@ impl Default for RenderConfig {
             flid_x: false,
             chart_ratio: 1.0,
             buffer_size: 256.0,
-            combo: "AUTOPLAY".to_string(),
-            fps: 60,
-            hardware_accel: true,
+            combo: "Phi-TK POWERED".to_string(),
+            fps: 30,
+            hardware_accel: false,
             video_codec: "h264".to_string(),
-            encoder: "auto".to_string(),
+            encoder: "qsv".to_string(),
             show_progress_text: false,
             show_time_text: false,
             target_audio: 44100,
@@ -136,8 +142,8 @@ impl Default for RenderConfig {
             note_scale: 1.0,
             particle: true,
             player_avatar: None,
-            player_name: "".to_string(),
-            player_rks: 15.0,
+            player_name: "Link/Mivik".to_string(),
+            player_rks: 17.0,
             sample_count: 1,
             res_pack_path: None,
             speed: 1.0,
@@ -147,11 +153,11 @@ impl Default for RenderConfig {
             note_speed_factor: 1.0,
             video: false,
             audio_bit: None,
-            audio_format: "flac".to_string(),
+            audio_format: "mp3".to_string(),
             ui_score: true,
             ui_combo: true,
-            ui_name: true,
-            ui_level: true,
+            ui_name: false,
+            ui_level: false,
             ui_line: true,
             ui_pb: true,
             ui_pause: true,
@@ -238,9 +244,9 @@ struct EncoderAvailability {
     hevc_cuvid: bool,
     av1_cuvid: bool,
     // Vulkan encoders
-    h264_vulkan: bool,
-    hevc_vulkan: bool,
-    av1_vulkan: bool,
+    // h264_vulkan: bool,
+    // hevc_vulkan: bool,
+    // av1_vulkan: bool,
 }
 
 #[cfg(target_os = "windows")]
@@ -249,14 +255,14 @@ mod hw_detect {
     use winreg::{enums::HKEY_LOCAL_MACHINE, RegKey};
 
     pub fn detect_nvidia() -> bool {
+        use std::path::Path;
         use std::process::Command;
         use winreg::enums::HKEY_LOCAL_MACHINE;
         use winreg::RegKey;
-        use std::path::Path;
 
-        if let Ok(key) = RegKey::predef(HKEY_LOCAL_MACHINE)
-            .open_subkey(r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}")
-        {
+        if let Ok(key) = RegKey::predef(HKEY_LOCAL_MACHINE).open_subkey(
+            r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}",
+        ) {
             for subkey_name in key.enum_keys().filter_map(|x| x.ok()) {
                 if let Ok(subkey) = key.open_subkey(&subkey_name) {
                     if let Ok(provider) = subkey.get_value::<String, _>("ProviderName") {
@@ -305,8 +311,11 @@ mod hw_detect {
     }
 
     pub fn detect_vulkan() -> bool {
-        // Check for Vulkan runtime (Vulkan Loader)
-        Path::new(r"C:\Windows\System32\vulkan-1.dll").exists()
+        // Check for Vulkan ICD files (indicates Vulkan driver is installed)
+        // path::new("/usr/share/vulkan/icd.d").exists()
+        // || Path::new("/etc/vulkan/icd.d").exists()
+        // || Path::new("/usr/local/share/vulkan/icd.d").exists()
+        false
     }
 }
 
@@ -320,26 +329,20 @@ mod hw_detect {
     }
 
     pub fn detect_intel_qsv() -> bool {
-        Path::new("/dev/dri/renderD128").exists()
-            && Command::new("vainfo")
-            .output()
-            .map(|out| String::from_utf8_lossy(&out.stdout).contains("VAProfileH264"))
-            .unwrap_or(false)
+        true
     }
 
     pub fn detect_amd() -> bool {
         Path::new("/dev/kfd").exists()
             && Command::new("vainfo")
-            .output()
-            .map(|out| String::from_utf8_lossy(&out.stdout).contains("AMD"))
-            .unwrap_or(false)
+                .output()
+                .map(|out| String::from_utf8_lossy(&out.stdout).contains("AMD"))
+                .unwrap_or(false)
     }
 
     pub fn detect_vulkan() -> bool {
         // Check for Vulkan ICD files (indicates Vulkan driver is installed)
-        Path::new("/usr/share/vulkan/icd.d").exists()
-            || Path::new("/etc/vulkan/icd.d").exists()
-            || Path::new("/usr/local/share/vulkan/icd.d").exists()
+        false || false || false
     }
 }
 
@@ -374,28 +377,25 @@ mod hw_detect {
     pub fn detect_vulkan() -> bool {
         // macOS uses MoltenVK for Vulkan support
         // Check for MoltenVK or Vulkan loader
-        Command::new("sh")
-            .arg("-c")
-            .arg("ls /usr/local/lib/libMoltenVK.dylib 2>/dev/null || ls /opt/homebrew/lib/libMoltenVK.dylib 2>/dev/null || ls ~/Library/Frameworks/libMoltenVK.dylib 2>/dev/null")
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
+        // Command::new("sh")
+        //     .arg("-c")
+        //     .arg("ls /usr/local/lib/libMoltenVK.dylib 2>/dev/null || ls /opt/homebrew/lib/libMoltenVK.dylib 2>/dev/null || ls ~/Library/Frameworks/libMoltenVK.dylib 2>/dev/null")
+        //     .status()
+        //     .map(|s| s.success())
+        //     .unwrap_or(false)
+        false
     }
 }
 
 pub async fn build_player(config: &RenderConfig) -> Result<BasicPlayer> {
     Ok(BasicPlayer {
         avatar: if let Some(path) = &config.player_avatar {
-            Some(
-                SafeTexture::from(
-                    Texture2D::from_file_with_format(
-                        &tokio::fs::read(path)
-                            .await
-                            .with_context(|| tl!("load-avatar-failed"))?,
-                        None,
-                    )
-                ),
-            )
+            Some(SafeTexture::from(Texture2D::from_file_with_format(
+                &tokio::fs::read(path)
+                    .await
+                    .with_context(|| tl!("load-avatar-failed"))?,
+                None,
+            )))
         } else {
             None
         },
@@ -455,21 +455,12 @@ pub fn find_ffmpeg() -> Result<Option<String>> {
 }
 
 pub async fn main() -> Result<()> {
-    use crate::ipc::client::*;
+    // 保持兼容，直接返回错误或者调用 CLI
+    Err(anyhow::anyhow!("请使用 CLI 入口 render_cli()"))
+}
 
-    set_pc_assets_folder(&std::env::args().nth(2).unwrap());
-
-    let mut stdin = std::io::stdin().lock();
-    let stdin = &mut stdin;
-
-    let mut line = String::new();
-    stdin.read_line(&mut line)?;
-    let params: RenderParams = serde_json::from_str(line.trim())?;
+pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Result<()> {
     let path = params.path;
-
-    line.clear();
-    stdin.read_line(&mut line)?;
-    let output_path: PathBuf = serde_json::from_str(line.trim())?;
 
     let mut fs = fs::fs_from_file(&path)?;
 
@@ -487,36 +478,32 @@ pub async fn main() -> Result<()> {
 
     let info = params.info;
 
-    let (chart, ..) = GameScene::load_chart(fs.deref_mut(), &info)
+    // 加载谱面
+    let (chart, ..) = prpr::scene::GameScene::load_chart(fs.deref_mut(), &info)
         .await
-        .with_context(|| tl!("load-chart-failed"))?;
-    macro_rules! ld {
-            ($path:literal) => {
-                AudioClip::new(load_file($path).await?)
-                    .with_context(|| tl!("load-sfx-failed", "name" => $path))?
-            };
-        }
-    let music: Result<_> = async { AudioClip::new(fs.load_file(&info.music).await?) }.await;
-    let music = music.with_context(|| tl!("load-music-failed"))?;
-    let ending = ld!("ending.mp3"); //煞笔吧
-    let track_length = music.length() as f64;
-    let sfx_click = ld!("click.ogg");
-    let sfx_drag = ld!("drag.ogg");
-    let sfx_flick = ld!("flick.ogg");
+        .with_context(|| "load-chart-failed")?;
 
+    // 加载音乐和音效
+    let music = sasa::AudioClip::new(fs.load_file(&info.music).await?)
+        .with_context(|| "load-music-failed")?;
+    let ending = sasa::AudioClip::new(macroquad::prelude::load_file("ending.mp3").await?)?;
+    let sfx_click = sasa::AudioClip::new(macroquad::prelude::load_file("click.ogg").await?)?;
+    let sfx_drag = sasa::AudioClip::new(macroquad::prelude::load_file("drag.ogg").await?)?;
+    let sfx_flick = sasa::AudioClip::new(macroquad::prelude::load_file("flick.ogg").await?)?;
     //let mut gl = unsafe { get_internal_gl() };
     let gl = unsafe { get_internal_gl() };
 
     let volume_music = std::mem::take(&mut config.volume_music);
     let volume_sfx = std::mem::take(&mut config.volume_sfx);
 
+    let track_length = music.length() as f64;
     let length = track_length - chart.offset.min(0.) as f64 + 1.;
     let video_length = O + length + A + params.config.ending_length;
     let offset = chart.offset.max(0.);
 
     let render_start_time = Instant::now();
 
-    send(IPCEvent::StartMixing);
+    println!("IPCEvent::StartMixing");
     let mixing_output = NamedTempFile::new()?;
     let target_sample_rate = params.config.target_audio;
     let sample_rate = 44100;
@@ -533,8 +520,15 @@ pub async fn main() -> Result<()> {
     info!("=== Audio/Video Sync Configuration ===");
     info!("  Audio delay: {} frames", params.config.audio_delay_frames);
     info!("  Audio delay: {:.6} seconds", audio_delay);
-    info!("  Frame duration: {:.6}s @ {}fps", frame_duration, params.config.fps);
-    info!("  Sample delay: {} samples @ {}Hz", (audio_delay * sample_rate_f64).round() as i64, sample_rate);
+    info!(
+        "  Frame duration: {:.6}s @ {}fps",
+        frame_duration, params.config.fps
+    );
+    info!(
+        "  Sample delay: {} samples @ {}Hz",
+        (audio_delay * sample_rate_f64).round() as i64,
+        sample_rate
+    );
     info!("======================================");
 
     let audio_buffer_length = video_length + audio_delay.abs();
@@ -545,14 +539,21 @@ pub async fn main() -> Result<()> {
         let original_pos = O - chart.offset.min(0.) as f64;
         let pos = original_pos + audio_delay;
 
-        info!("Music mixing: original_pos={:.6}s, delayed_pos={:.6}s", original_pos, pos);
+        info!(
+            "Music mixing: original_pos={:.6}s, delayed_pos={:.6}s",
+            original_pos, pos
+        );
 
         //let count = (music.length() as f64 * sample_rate_f64) as usize;
         let start_index = (pos * sample_rate_f64).round() as usize * 2;
         let ratio = 1.0 / sample_rate_f64;
 
         if start_index >= output.len() {
-            warn!("Music start position {} exceeds output buffer length {}", start_index, output.len());
+            warn!(
+                "Music start position {} exceeds output buffer length {}",
+                start_index,
+                output.len()
+            );
         } else {
             let output_ptr = output.as_mut_ptr();
             let max_i = (output.len() - start_index) / 2;
@@ -602,7 +603,10 @@ pub async fn main() -> Result<()> {
         let offset_f64 = offset as f64;
         let o_offset = O + offset_f64 + audio_delay;
 
-        info!("SFX mixing: offset={:.6}s (includes {:.6}s delay)", o_offset, audio_delay);
+        info!(
+            "SFX mixing: offset={:.6}s (includes {:.6}s delay)",
+            o_offset, audio_delay
+        );
 
         let sfx_click_ptr = &sfx_click as *const _;
         let sfx_drag_ptr = &sfx_drag as *const _;
@@ -619,8 +623,7 @@ pub async fn main() -> Result<()> {
                 for j in 0..notes_len {
                     let note = &*notes_ptr.add(j);
                     if !note.fake {
-                        let sfx = match note.kind
-                        {
+                        let sfx = match note.kind {
                             NoteKind::Click | NoteKind::Hold { .. } => &*sfx_click_ptr,
                             NoteKind::Drag => &*sfx_drag_ptr,
                             NoteKind::Flick => &*sfx_flick_ptr,
@@ -656,28 +659,34 @@ pub async fn main() -> Result<()> {
     }
 
     if let Some(bit) = audio_bit {
-        if ![16, 24, 32].contains(&bit)
-        {
-            bail!("Invalid audio bit depth: {}. Supported values are 16, 24, 32.", bit);
+        if ![16, 24, 32].contains(&bit) {
+            bail!(
+                "Invalid audio bit depth: {}. Supported values are 16, 24, 32.",
+                bit
+            );
         }
-        if audio_format != "wav"
-        {
-            return Err(anyhow::anyhow!("PCM audio bit depth requires WAV format, but {} was specified", audio_format));
+        if audio_format != "wav" {
+            return Err(anyhow::anyhow!(
+                "PCM audio bit depth requires WAV format, but {} was specified",
+                audio_format
+            ));
         }
     }
 
     let (audio_codec, output_format) = if let Some(bit) = audio_bit {
         (format!("pcm_f{}le", bit), "wav".to_string())
     } else {
-        match audio_format.as_str()
-        {
+        match audio_format.as_str() {
             "flac" => ("flac".to_string(), "flac".to_string()),
             "mp3" => ("libmp3lame".to_string(), "mp3".to_string()),
             "aac" => ("aac".to_string(), "mp4".to_string()),
             "opus" => ("libopus".to_string(), "opus".to_string()),
             "wav" => ("pcm_f16le".to_string(), "wav".to_string()),
             _ => {
-                warn!("Unknown audio format '{}', using AAC/MP4 as default", audio_format);
+                warn!(
+                    "Unknown audio format '{}', using AAC/MP4 as default",
+                    audio_format
+                );
                 ("aac".to_string(), "mp4".to_string())
             }
         }
@@ -685,20 +694,18 @@ pub async fn main() -> Result<()> {
 
     // 构建参数字符串
     let args_str = if target_sample_rate != sample_rate {
-        let resample_filter = format!("aresample=resampler=soxr:precision=33:osr={}:dither_method=triangular", target_sample_rate);
+        let resample_filter = format!(
+            "aresample=resampler=soxr:precision=33:osr={}:dither_method=triangular",
+            target_sample_rate
+        );
         format!(
             "-y -f f32le -ar {} -ac 2 -i - -af {} -c:a {} -f {}",
-            sample_rate,
-            resample_filter,
-            audio_codec,
-            output_format
+            sample_rate, resample_filter, audio_codec, output_format
         )
     } else {
         format!(
             "-y -f f32le -ar {} -ac 2 -i - -c:a {} -f {}",
-            sample_rate,
-            audio_codec,
-            output_format
+            sample_rate, audio_codec, output_format
         )
     };
 
@@ -732,7 +739,10 @@ pub async fn main() -> Result<()> {
         } else {
             vh = (vw as f64 / target_aspect).round() as u32;
         }
-        info!("{}x{} -> {}x{} (target {:.9})", ow, oh, vw, vh, target_aspect);
+        info!(
+            "{}x{} -> {}x{} (target {:.9})",
+            ow, oh, vw, vh, target_aspect
+        );
     }
 
     let mst = Rc::new(MSRenderTarget::new((vw, vh), config.sample_count));
@@ -763,7 +773,7 @@ pub async fn main() -> Result<()> {
             }
         },
     )
-        .await?;
+    .await?;
     main.top_level = false;
     main.viewport = Some((0, 0, vw as _, vh as _));
 
@@ -773,7 +783,7 @@ pub async fn main() -> Result<()> {
     let fps = params.config.fps;
     //let frame_delta = 1. / fps as f32;
     let frames = (video_length * fps as f64).ceil() as u64;
-    send(IPCEvent::StartRender(frames));
+    println!("IPCEvent::StartRender(frames)");
     /*
         let codecs = String::from_utf8(
             cmd_hidden(&ffmpeg)
@@ -842,20 +852,33 @@ pub async fn main() -> Result<()> {
         if encoder.ends_with("_vulkan") {
             // Vulkan 编码器只支持 NV12 格式，使用 hwupload 上传
             cmd.args(&[
-                "-init_hw_device", "vulkan=vk",
-                "-f", "lavfi",
-                "-i", "testsrc=duration=0.1:size=320x240:rate=30",
-                "-filter_hw_device", "vk",
-                "-vf", "format=nv12,hwupload",
-                "-c:v", encoder,
-                "-f", "null", "-",
+                "-init_hw_device",
+                "vulkan=vk",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=duration=0.1:size=320x240:rate=30",
+                "-filter_hw_device",
+                "vk",
+                "-vf",
+                "format=nv12,hwupload",
+                "-c:v",
+                encoder,
+                "-f",
+                "null",
+                "-",
             ]);
         } else {
             cmd.args(&[
-                "-f", "lavfi",
-                "-i", "color=c=black:s=320x240:d=0",
-                "-c:v", encoder,
-                "-f", "null", "-",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=black:s=320x240:d=0",
+                "-c:v",
+                encoder,
+                "-f",
+                "null",
+                "-",
             ]);
         }
 
@@ -883,10 +906,16 @@ pub async fn main() -> Result<()> {
             && params.config.video_codec == "hevc"
             && hw_detect::detect_intel_qsv(),
         h264_amf: params.config.hardware_accel && hw_detect::detect_amd(),
-        hevc_amf: params.config.hardware_accel && params.config.video_codec == "hevc" && hw_detect::detect_amd(),
+        hevc_amf: params.config.hardware_accel
+            && params.config.video_codec == "hevc"
+            && hw_detect::detect_amd(),
         h264_cuvid: params.config.hardware_accel && hw_detect::detect_nvidia(),
-        hevc_cuvid: params.config.hardware_accel && params.config.video_codec == "hevc" && hw_detect::detect_nvidia(),
-        av1_cuvid: params.config.hardware_accel && params.config.video_codec == "av1" && hw_detect::detect_nvidia(),
+        hevc_cuvid: params.config.hardware_accel
+            && params.config.video_codec == "hevc"
+            && hw_detect::detect_nvidia(),
+        av1_cuvid: params.config.hardware_accel
+            && params.config.video_codec == "av1"
+            && hw_detect::detect_nvidia(),
         av1_nvenc: params.config.hardware_accel
             && params.config.video_codec == "av1"
             && hw_detect::detect_nvidia(),
@@ -897,13 +926,13 @@ pub async fn main() -> Result<()> {
             && params.config.video_codec == "av1"
             && hw_detect::detect_amd(),
         // Vulkan encoders - detect Vulkan runtime
-        h264_vulkan: params.config.hardware_accel && hw_detect::detect_vulkan(),
-        hevc_vulkan: params.config.hardware_accel
-            && params.config.video_codec == "hevc"
-            && hw_detect::detect_vulkan(),
-        av1_vulkan: params.config.hardware_accel
-            && params.config.video_codec == "av1"
-            && hw_detect::detect_vulkan(),
+        // h264_vulkan: params.config.hardware_accel // && hw_detect::detect_vulkan(),
+        // hevc_vulkan: params.config.hardware_accel
+        // && params.config.video_codec == "hevc"
+        // && hw_detect::detect_vulkan(),
+        // av1_vulkan: params.config.hardware_accel
+        // && params.config.video_codec == "av1"
+        // && hw_detect::detect_vulkan(),
     };
 
     let mut hw_errors = Vec::new();
@@ -921,25 +950,61 @@ pub async fn main() -> Result<()> {
         h264_cuvid: false,
         hevc_cuvid: false,
         av1_cuvid: false,
-        h264_vulkan: false,
-        hevc_vulkan: false,
-        av1_vulkan: false,
+        //h264_vulkan: false,
+        //hevc_vulkan: false,
+        //av1_vulkan: false,
     };
 
     let encoders_to_test = [
-        ("h264_nvenc", hw_detected.h264_nvenc, &mut encoder_availability.h264_nvenc),
-        ("hevc_nvenc", hw_detected.hevc_nvenc, &mut encoder_availability.hevc_nvenc),
-        ("av1_nvenc", hw_detected.av1_nvenc, &mut encoder_availability.av1_nvenc),
-        ("h264_qsv", hw_detected.h264_qsv, &mut encoder_availability.h264_qsv),
-        ("hevc_qsv", hw_detected.hevc_qsv, &mut encoder_availability.hevc_qsv),
-        ("av1_qsv", hw_detected.av1_qsv, &mut encoder_availability.av1_qsv),
-        ("h264_amf", hw_detected.h264_amf, &mut encoder_availability.h264_amf),
-        ("hevc_amf", hw_detected.hevc_amf, &mut encoder_availability.hevc_amf),
-        ("av1_amf", hw_detected.av1_amf, &mut encoder_availability.av1_amf),
+        (
+            "h264_nvenc",
+            hw_detected.h264_nvenc,
+            &mut encoder_availability.h264_nvenc,
+        ),
+        (
+            "hevc_nvenc",
+            hw_detected.hevc_nvenc,
+            &mut encoder_availability.hevc_nvenc,
+        ),
+        (
+            "av1_nvenc",
+            hw_detected.av1_nvenc,
+            &mut encoder_availability.av1_nvenc,
+        ),
+        (
+            "h264_qsv",
+            hw_detected.h264_qsv,
+            &mut encoder_availability.h264_qsv,
+        ),
+        (
+            "hevc_qsv",
+            hw_detected.hevc_qsv,
+            &mut encoder_availability.hevc_qsv,
+        ),
+        (
+            "av1_qsv",
+            hw_detected.av1_qsv,
+            &mut encoder_availability.av1_qsv,
+        ),
+        (
+            "h264_amf",
+            hw_detected.h264_amf,
+            &mut encoder_availability.h264_amf,
+        ),
+        (
+            "hevc_amf",
+            hw_detected.hevc_amf,
+            &mut encoder_availability.hevc_amf,
+        ),
+        (
+            "av1_amf",
+            hw_detected.av1_amf,
+            &mut encoder_availability.av1_amf,
+        ),
         // Vulkan encoders
-        ("h264_vulkan", hw_detected.h264_vulkan, &mut encoder_availability.h264_vulkan),
-        ("hevc_vulkan", hw_detected.hevc_vulkan, &mut encoder_availability.hevc_vulkan),
-        ("av1_vulkan", hw_detected.av1_vulkan, &mut encoder_availability.av1_vulkan),
+        // ("h264_vulkan", hw_detected.h264_vulkan, &mut encoder_availability.h264_vulkan),
+        // ("hevc_vulkan", hw_detected.hevc_vulkan, &mut encoder_availability.hevc_vulkan),
+        // ("av1_vulkan", hw_detected.av1_vulkan, &mut encoder_availability.av1_vulkan),
     ];
 
     for (name, detected, availability_flag) in encoders_to_test {
@@ -949,11 +1014,7 @@ pub async fn main() -> Result<()> {
                     *availability_flag = success;
 
                     if !success {
-                        hw_errors.push(format!(
-                            "{} test failed:\n{}",
-                            name,
-                            error_output.trim()
-                        ));
+                        hw_errors.push(format!("{} test failed:\n{}", name, error_output.trim()));
                     }
                 }
                 Err(e) => {
@@ -965,9 +1026,21 @@ pub async fn main() -> Result<()> {
     }
 
     let cuvid_to_test = [
-        ("h264_cuvid", hw_detected.h264_cuvid, &mut encoder_availability.h264_cuvid),
-        ("hevc_cuvid", hw_detected.hevc_cuvid, &mut encoder_availability.hevc_cuvid),
-        ("av1_cuvid", hw_detected.av1_cuvid, &mut encoder_availability.av1_cuvid),
+        (
+            "h264_cuvid",
+            hw_detected.h264_cuvid,
+            &mut encoder_availability.h264_cuvid,
+        ),
+        (
+            "hevc_cuvid",
+            hw_detected.hevc_cuvid,
+            &mut encoder_availability.hevc_cuvid,
+        ),
+        (
+            "av1_cuvid",
+            hw_detected.av1_cuvid,
+            &mut encoder_availability.av1_cuvid,
+        ),
     ];
 
     for (name, detected, availability_flag) in cuvid_to_test {
@@ -981,29 +1054,43 @@ pub async fn main() -> Result<()> {
             };
 
             let mut encode_cmd = Command::new(&ffmpeg);
-            encode_cmd.args(&[
-                "-f", "lavfi",
-                "-i", "testsrc=duration=1:size=320x240:rate=30",
-                "-vf", "format=yuv420p",  // 强制使用 yuv420p 格式
-                "-c:v", encoder_name,
-                "-t", "0.5",  // 只编码0.5秒
-                "-f", container_format,
-                "-"  // 输出到stdout
-            ])
+            encode_cmd
+                .args(&[
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc=duration=1:size=320x240:rate=30",
+                    "-vf",
+                    "format=yuv420p", // 强制使用 yuv420p 格式
+                    "-c:v",
+                    encoder_name,
+                    "-t",
+                    "0.5", // 只编码0.5秒
+                    "-f",
+                    container_format,
+                    "-", // 输出到stdout
+                ])
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null());
 
             // 2. 解码测试
             let mut decode_cmd = Command::new(&ffmpeg);
-            decode_cmd.args(&[
-                "-hwaccel", "cuvid",
-                "-hwaccel_device", "0",
-                "-c:v", name,
-                "-f", container_format,
-                "-i", "-",  // 从stdin读取
-                "-f", "null",
-                "-"  // 输出到null
-            ])
+            decode_cmd
+                .args(&[
+                    "-hwaccel",
+                    "cuvid",
+                    "-hwaccel_device",
+                    "0",
+                    "-c:v",
+                    name,
+                    "-f",
+                    container_format,
+                    "-i",
+                    "-", // 从stdin读取
+                    "-f",
+                    "null",
+                    "-", // 输出到null
+                ])
                 .stdin(Stdio::piped())
                 .stdout(Stdio::null())
                 .stderr(Stdio::piped());
@@ -1045,126 +1132,303 @@ pub async fn main() -> Result<()> {
         "hevc" => {
             match encoder_type {
                 "nvenc" => vec![
-                    ("hevc_nvenc", encoder_availability.hevc_nvenc, &mut encoder_availability.hevc_nvenc),
-                    ("hevc_vulkan", encoder_availability.hevc_vulkan, &mut encoder_availability.hevc_vulkan),
-                    ("hevc_qsv", encoder_availability.hevc_qsv, &mut encoder_availability.hevc_qsv),
-                    ("hevc_amf", encoder_availability.hevc_amf, &mut encoder_availability.hevc_amf),
+                    (
+                        "hevc_nvenc",
+                        encoder_availability.hevc_nvenc,
+                        &mut encoder_availability.hevc_nvenc,
+                    ),
+                    //("hevc_vulkan", encoder_availability.hevc_vulkan, &mut encoder_availability.hevc_vulkan),
+                    (
+                        "hevc_qsv",
+                        encoder_availability.hevc_qsv,
+                        &mut encoder_availability.hevc_qsv,
+                    ),
+                    (
+                        "hevc_amf",
+                        encoder_availability.hevc_amf,
+                        &mut encoder_availability.hevc_amf,
+                    ),
                     ("libx265", true, &mut dummy_flag),
                 ],
                 "qsv" => vec![
-                    ("hevc_qsv", encoder_availability.hevc_qsv, &mut encoder_availability.hevc_qsv),
-                    ("hevc_vulkan", encoder_availability.hevc_vulkan, &mut encoder_availability.hevc_vulkan),
-                    ("hevc_nvenc", encoder_availability.hevc_nvenc, &mut encoder_availability.hevc_nvenc),
-                    ("hevc_amf", encoder_availability.hevc_amf, &mut encoder_availability.hevc_amf),
+                    (
+                        "hevc_qsv",
+                        encoder_availability.hevc_qsv,
+                        &mut encoder_availability.hevc_qsv,
+                    ),
+                    //("hevc_vulkan", encoder_availability.hevc_vulkan, &mut encoder_availability.hevc_vulkan),
+                    (
+                        "hevc_nvenc",
+                        encoder_availability.hevc_nvenc,
+                        &mut encoder_availability.hevc_nvenc,
+                    ),
+                    (
+                        "hevc_amf",
+                        encoder_availability.hevc_amf,
+                        &mut encoder_availability.hevc_amf,
+                    ),
                     ("libx265", true, &mut dummy_flag),
                 ],
                 "amf" => vec![
-                    ("hevc_amf", encoder_availability.hevc_amf, &mut encoder_availability.hevc_amf),
-                    ("hevc_vulkan", encoder_availability.hevc_vulkan, &mut encoder_availability.hevc_vulkan),
-                    ("hevc_nvenc", encoder_availability.hevc_nvenc, &mut encoder_availability.hevc_nvenc),
-                    ("hevc_qsv", encoder_availability.hevc_qsv, &mut encoder_availability.hevc_qsv),
+                    (
+                        "hevc_amf",
+                        encoder_availability.hevc_amf,
+                        &mut encoder_availability.hevc_amf,
+                    ),
+                    //("hevc_vulkan", encoder_availability.hevc_vulkan, &mut encoder_availability.hevc_vulkan),
+                    (
+                        "hevc_nvenc",
+                        encoder_availability.hevc_nvenc,
+                        &mut encoder_availability.hevc_nvenc,
+                    ),
+                    (
+                        "hevc_qsv",
+                        encoder_availability.hevc_qsv,
+                        &mut encoder_availability.hevc_qsv,
+                    ),
                     ("libx265", true, &mut dummy_flag),
                 ],
                 "vulkan" => vec![
-                    ("hevc_vulkan", encoder_availability.hevc_vulkan, &mut encoder_availability.hevc_vulkan),
-                    ("hevc_nvenc", encoder_availability.hevc_nvenc, &mut encoder_availability.hevc_nvenc),
-                    ("hevc_qsv", encoder_availability.hevc_qsv, &mut encoder_availability.hevc_qsv),
-                    ("hevc_amf", encoder_availability.hevc_amf, &mut encoder_availability.hevc_amf),
+                    //("hevc_vulkan", encoder_availability.hevc_vulkan, &mut encoder_availability.hevc_vulkan),
+                    (
+                        "hevc_nvenc",
+                        encoder_availability.hevc_nvenc,
+                        &mut encoder_availability.hevc_nvenc,
+                    ),
+                    (
+                        "hevc_qsv",
+                        encoder_availability.hevc_qsv,
+                        &mut encoder_availability.hevc_qsv,
+                    ),
+                    (
+                        "hevc_amf",
+                        encoder_availability.hevc_amf,
+                        &mut encoder_availability.hevc_amf,
+                    ),
                     ("libx265", true, &mut dummy_flag),
                 ],
-                "cpu" => vec![
-                    ("libx265", true, &mut dummy_flag),
-                ],
-                _ => vec![ // auto
-                    ("hevc_nvenc", encoder_availability.hevc_nvenc, &mut encoder_availability.hevc_nvenc),
-                    ("hevc_qsv", encoder_availability.hevc_qsv, &mut encoder_availability.hevc_qsv),
-                    ("hevc_amf", encoder_availability.hevc_amf, &mut encoder_availability.hevc_amf),
-                    ("hevc_vulkan", encoder_availability.hevc_vulkan, &mut encoder_availability.hevc_vulkan),
+                "cpu" => vec![("libx265", true, &mut dummy_flag)],
+                _ => vec![
+                    // auto
+                    (
+                        "hevc_nvenc",
+                        encoder_availability.hevc_nvenc,
+                        &mut encoder_availability.hevc_nvenc,
+                    ),
+                    (
+                        "hevc_qsv",
+                        encoder_availability.hevc_qsv,
+                        &mut encoder_availability.hevc_qsv,
+                    ),
+                    (
+                        "hevc_amf",
+                        encoder_availability.hevc_amf,
+                        &mut encoder_availability.hevc_amf,
+                    ),
+                    //("hevc_vulkan", encoder_availability.hevc_vulkan, &mut encoder_availability.hevc_vulkan),
                     ("libx265", true, &mut dummy_flag),
                 ],
             }
-        },
+        }
         "av1" => {
             match encoder_type {
                 "nvenc" => vec![
-                    ("av1_nvenc", encoder_availability.av1_nvenc, &mut encoder_availability.av1_nvenc),
-                    ("av1_qsv", encoder_availability.av1_qsv, &mut encoder_availability.av1_qsv),
-                    ("av1_amf", encoder_availability.av1_amf, &mut encoder_availability.av1_amf),
+                    (
+                        "av1_nvenc",
+                        encoder_availability.av1_nvenc,
+                        &mut encoder_availability.av1_nvenc,
+                    ),
+                    (
+                        "av1_qsv",
+                        encoder_availability.av1_qsv,
+                        &mut encoder_availability.av1_qsv,
+                    ),
+                    (
+                        "av1_amf",
+                        encoder_availability.av1_amf,
+                        &mut encoder_availability.av1_amf,
+                    ),
                     ("libaom-av1", true, &mut dummy_flag),
                 ],
                 "qsv" => vec![
-                    ("av1_qsv", encoder_availability.av1_qsv, &mut encoder_availability.av1_qsv),
-                    ("av1_nvenc", encoder_availability.av1_nvenc, &mut encoder_availability.av1_nvenc),
-                    ("av1_amf", encoder_availability.av1_amf, &mut encoder_availability.av1_amf),
+                    (
+                        "av1_qsv",
+                        encoder_availability.av1_qsv,
+                        &mut encoder_availability.av1_qsv,
+                    ),
+                    (
+                        "av1_nvenc",
+                        encoder_availability.av1_nvenc,
+                        &mut encoder_availability.av1_nvenc,
+                    ),
+                    (
+                        "av1_amf",
+                        encoder_availability.av1_amf,
+                        &mut encoder_availability.av1_amf,
+                    ),
                     ("libaom-av1", true, &mut dummy_flag),
                 ],
                 "amf" => vec![
-                    ("av1_amf", encoder_availability.av1_amf, &mut encoder_availability.av1_amf),
-                    ("av1_nvenc", encoder_availability.av1_nvenc, &mut encoder_availability.av1_nvenc),
-                    ("av1_qsv", encoder_availability.av1_qsv, &mut encoder_availability.av1_qsv),
+                    (
+                        "av1_amf",
+                        encoder_availability.av1_amf,
+                        &mut encoder_availability.av1_amf,
+                    ),
+                    (
+                        "av1_nvenc",
+                        encoder_availability.av1_nvenc,
+                        &mut encoder_availability.av1_nvenc,
+                    ),
+                    (
+                        "av1_qsv",
+                        encoder_availability.av1_qsv,
+                        &mut encoder_availability.av1_qsv,
+                    ),
                     ("libaom-av1", true, &mut dummy_flag),
                 ],
                 "vulkan" => vec![
-                    ("av1_nvenc", encoder_availability.av1_nvenc, &mut encoder_availability.av1_nvenc),
-                    ("av1_qsv", encoder_availability.av1_qsv, &mut encoder_availability.av1_qsv),
-                    ("av1_amf", encoder_availability.av1_amf, &mut encoder_availability.av1_amf),
+                    (
+                        "av1_nvenc",
+                        encoder_availability.av1_nvenc,
+                        &mut encoder_availability.av1_nvenc,
+                    ),
+                    (
+                        "av1_qsv",
+                        encoder_availability.av1_qsv,
+                        &mut encoder_availability.av1_qsv,
+                    ),
+                    (
+                        "av1_amf",
+                        encoder_availability.av1_amf,
+                        &mut encoder_availability.av1_amf,
+                    ),
                     ("libaom-av1", true, &mut dummy_flag),
                 ],
-                "cpu" => vec![
-                    ("libaom-av1", true, &mut dummy_flag),
-                ],
-                _ => vec![ // auto
-                    ("av1_nvenc", encoder_availability.av1_nvenc, &mut encoder_availability.av1_nvenc),
-                    ("av1_qsv", encoder_availability.av1_qsv, &mut encoder_availability.av1_qsv),
-                    ("av1_amf", encoder_availability.av1_amf, &mut encoder_availability.av1_amf),
+                "cpu" => vec![("libaom-av1", true, &mut dummy_flag)],
+                _ => vec![
+                    // auto
+                    (
+                        "av1_nvenc",
+                        encoder_availability.av1_nvenc,
+                        &mut encoder_availability.av1_nvenc,
+                    ),
+                    (
+                        "av1_qsv",
+                        encoder_availability.av1_qsv,
+                        &mut encoder_availability.av1_qsv,
+                    ),
+                    (
+                        "av1_amf",
+                        encoder_availability.av1_amf,
+                        &mut encoder_availability.av1_amf,
+                    ),
                     ("libaom-av1", true, &mut dummy_flag),
                 ],
             }
-        },
-        _ => { // h264
+        }
+        _ => {
+            // h264
             match encoder_type {
                 "nvenc" => vec![
-                    ("h264_nvenc", encoder_availability.h264_nvenc, &mut encoder_availability.h264_nvenc),
-                    ("h264_vulkan", encoder_availability.h264_vulkan, &mut encoder_availability.h264_vulkan),
-                    ("h264_qsv", encoder_availability.h264_qsv, &mut encoder_availability.h264_qsv),
-                    ("h264_amf", encoder_availability.h264_amf, &mut encoder_availability.h264_amf),
+                    (
+                        "h264_nvenc",
+                        encoder_availability.h264_nvenc,
+                        &mut encoder_availability.h264_nvenc,
+                    ),
+                    //("h264_vulkan", encoder_availability.h264_vulkan, &mut encoder_availability.h264_vulkan),
+                    (
+                        "h264_qsv",
+                        encoder_availability.h264_qsv,
+                        &mut encoder_availability.h264_qsv,
+                    ),
+                    (
+                        "h264_amf",
+                        encoder_availability.h264_amf,
+                        &mut encoder_availability.h264_amf,
+                    ),
                     ("libx264", true, &mut dummy_flag),
                 ],
                 "qsv" => vec![
-                    ("h264_qsv", encoder_availability.h264_qsv, &mut encoder_availability.h264_qsv),
-                    ("h264_vulkan", encoder_availability.h264_vulkan, &mut encoder_availability.h264_vulkan),
-                    ("h264_nvenc", encoder_availability.h264_nvenc, &mut encoder_availability.h264_nvenc),
-                    ("h264_amf", encoder_availability.h264_amf, &mut encoder_availability.h264_amf),
+                    (
+                        "h264_qsv",
+                        encoder_availability.h264_qsv,
+                        &mut encoder_availability.h264_qsv,
+                    ),
+                    //("h264_vulkan", encoder_availability.h264_vulkan, &mut encoder_availability.h264_vulkan),
+                    (
+                        "h264_nvenc",
+                        encoder_availability.h264_nvenc,
+                        &mut encoder_availability.h264_nvenc,
+                    ),
+                    (
+                        "h264_amf",
+                        encoder_availability.h264_amf,
+                        &mut encoder_availability.h264_amf,
+                    ),
                     ("libx264", true, &mut dummy_flag),
                 ],
                 "amf" => vec![
-                    ("h264_amf", encoder_availability.h264_amf, &mut encoder_availability.h264_amf),
-                    ("h264_vulkan", encoder_availability.h264_vulkan, &mut encoder_availability.h264_vulkan),
-                    ("h264_nvenc", encoder_availability.h264_nvenc, &mut encoder_availability.h264_nvenc),
-                    ("h264_qsv", encoder_availability.h264_qsv, &mut encoder_availability.h264_qsv),
+                    (
+                        "h264_amf",
+                        encoder_availability.h264_amf,
+                        &mut encoder_availability.h264_amf,
+                    ),
+                    //("h264_vulkan", encoder_availability.h264_vulkan, &mut encoder_availability.h264_vulkan),
+                    (
+                        "h264_nvenc",
+                        encoder_availability.h264_nvenc,
+                        &mut encoder_availability.h264_nvenc,
+                    ),
+                    (
+                        "h264_qsv",
+                        encoder_availability.h264_qsv,
+                        &mut encoder_availability.h264_qsv,
+                    ),
                     ("libx264", true, &mut dummy_flag),
                 ],
                 "vulkan" => vec![
-                    ("h264_vulkan", encoder_availability.h264_vulkan, &mut encoder_availability.h264_vulkan),
-                    ("h264_nvenc", encoder_availability.h264_nvenc, &mut encoder_availability.h264_nvenc),
-                    ("h264_qsv", encoder_availability.h264_qsv, &mut encoder_availability.h264_qsv),
-                    ("h264_amf", encoder_availability.h264_amf, &mut encoder_availability.h264_amf),
+                    //("h264_vulkan", encoder_availability.h264_vulkan, &mut encoder_availability.h264_vulkan),
+                    (
+                        "h264_nvenc",
+                        encoder_availability.h264_nvenc,
+                        &mut encoder_availability.h264_nvenc,
+                    ),
+                    (
+                        "h264_qsv",
+                        encoder_availability.h264_qsv,
+                        &mut encoder_availability.h264_qsv,
+                    ),
+                    (
+                        "h264_amf",
+                        encoder_availability.h264_amf,
+                        &mut encoder_availability.h264_amf,
+                    ),
                     ("libx264", true, &mut dummy_flag),
                 ],
-                "cpu" => vec![
-                    ("libx264", true, &mut dummy_flag),
-                ],
-                _ => vec![ // auto
-                    ("h264_nvenc", encoder_availability.h264_nvenc, &mut encoder_availability.h264_nvenc),
-                    ("h264_qsv", encoder_availability.h264_qsv, &mut encoder_availability.h264_qsv),
-                    ("h264_amf", encoder_availability.h264_amf, &mut encoder_availability.h264_amf),
-                    ("h264_vulkan", encoder_availability.h264_vulkan, &mut encoder_availability.h264_vulkan),
+                "cpu" => vec![("libx264", true, &mut dummy_flag)],
+                _ => vec![
+                    // auto
+                    (
+                        "h264_nvenc",
+                        encoder_availability.h264_nvenc,
+                        &mut encoder_availability.h264_nvenc,
+                    ),
+                    (
+                        "h264_qsv",
+                        encoder_availability.h264_qsv,
+                        &mut encoder_availability.h264_qsv,
+                    ),
+                    (
+                        "h264_amf",
+                        encoder_availability.h264_amf,
+                        &mut encoder_availability.h264_amf,
+                    ),
+                    //("h264_vulkan", false, &mut encoder_availability.h264_vulkan),
                     ("libx264", true, &mut dummy_flag),
                 ],
             }
-        },
+        }
     };
-
 
     let ffmpeg_encoder = candidates
         .iter()
@@ -1173,36 +1437,33 @@ pub async fn main() -> Result<()> {
         .expect("At least one software encoder is available.");
 
     info!(
-    "=== Encoder Selection ===\n\
+        "=== Encoder Selection ===\n\
      Video codec: {}\n\
      User preference: {}\n\
      --- Encoder Availability ---\n\
        h264_nvenc: {}\n\
        h264_qsv: {}\n\
        h264_amf: {}\n\
-       h264_vulkan: {}\n\
        hevc_nvenc: {}\n\
        hevc_qsv: {}\n\
        hevc_amf: {}\n\
-       hevc_vulkan: {}\n\
        av1_nvenc: {}\n\
        av1_qsv: {}\n\
-       av1_amf: {}\n\
-       av1_vulkan: {}",
-    params.config.video_codec,
-    params.config.encoder,
-    encoder_availability.h264_nvenc,
-    encoder_availability.h264_qsv,
-    encoder_availability.h264_amf,
-    encoder_availability.h264_vulkan,
-    encoder_availability.hevc_nvenc,
-    encoder_availability.hevc_qsv,
-    encoder_availability.hevc_amf,
-    encoder_availability.hevc_vulkan,
-    encoder_availability.av1_nvenc,
-    encoder_availability.av1_qsv,
-    encoder_availability.av1_amf,
-    encoder_availability.av1_vulkan,
+       av1_amf: {}",
+        params.config.video_codec,
+        params.config.encoder,
+        encoder_availability.h264_nvenc,
+        encoder_availability.h264_qsv,
+        encoder_availability.h264_amf,
+        //encoder_availability.h264_vulkan,
+        encoder_availability.hevc_nvenc,
+        encoder_availability.hevc_qsv,
+        encoder_availability.hevc_amf,
+        //encoder_availability.hevc_vulkan,
+        encoder_availability.av1_nvenc,
+        encoder_availability.av1_qsv,
+        encoder_availability.av1_amf,
+        //encoder_availability.av1_vulkan,
     );
     if !hw_errors.is_empty() {
         info!("  --- Encoder Errors ---");
@@ -1215,7 +1476,7 @@ pub async fn main() -> Result<()> {
 
     let ffmpeg_preset = match ffmpeg_encoder {
         "h264_amf" | "hevc_amf" | "av1_amf" => "-quality",
-        "h264_vulkan" | "hevc_vulkan" | "av1_vulkan" => "-preset",
+        //"h264_vulkan" | "hevc_vulkan" | "av1_vulkan" => "-preset",
         _ => "-preset",
     };
 
@@ -1238,12 +1499,12 @@ pub async fn main() -> Result<()> {
             .split_whitespace()
             .nth(2)
             .unwrap_or("balanced"),
-        "h264_vulkan" | "hevc_vulkan" | "av1_vulkan" => params
-            .config
-            .ffmpeg_preset
-            .split_whitespace()
-            .next()
-            .unwrap_or("default"),
+        //"h264_vulkan" | "hevc_vulkan" | "av1_vulkan" => params
+        //.config
+        //.ffmpeg_preset
+        //.split_whitespace()
+        //.next()
+        //.unwrap_or("default"),
         _ => params
             .config
             .ffmpeg_preset
@@ -1257,7 +1518,7 @@ pub async fn main() -> Result<()> {
             "h264_nvenc" | "hevc_nvenc" | "av1_nvenc" => "-cq",
             "h264_qsv" | "hevc_qsv" | "av1_qsv" => "-q",
             "h264_amf" | "hevc_amf" | "av1_amf" => "-qp_p",
-            "h264_vulkan" | "hevc_vulkan" | "av1_vulkan" => "-qp",
+            //"h264_vulkan" | "hevc_vulkan" | "av1_vulkan" => "-qp",
             _ => "-crf",
         }
     } else {
@@ -1267,20 +1528,21 @@ pub async fn main() -> Result<()> {
     if params.config.hardware_accel {
         let h264_supported = encoder_availability.h264_nvenc
             || encoder_availability.h264_qsv
-            || encoder_availability.h264_amf
-            || encoder_availability.h264_vulkan;
+            || encoder_availability.h264_amf;
+        // || encoder_availability.h264_vulkan;
         let hevc_supported = encoder_availability.hevc_nvenc
             || encoder_availability.hevc_qsv
-            || encoder_availability.hevc_amf
-            || encoder_availability.hevc_vulkan;
+            || encoder_availability.hevc_amf;
+        // || encoder_availability.hevc_vulkan;
         let av1_supported = encoder_availability.av1_nvenc
             || encoder_availability.av1_qsv
-            || encoder_availability.av1_amf
-            || encoder_availability.av1_vulkan;
+            || encoder_availability.av1_amf;
+        // || encoder_availability.av1_vulkan;
 
         if (params.config.video_codec == "h264" && !h264_supported)
             || (params.config.video_codec == "hevc" && !hevc_supported)
-            || (params.config.video_codec == "av1" && !av1_supported) {
+            || (params.config.video_codec == "av1" && !av1_supported)
+        {
             let mut detailed_error = String::new();
             detailed_error += &format!("{}\n", tl!("no-hwacc"));
 
@@ -1288,74 +1550,121 @@ pub async fn main() -> Result<()> {
                 "Hardware detection summary:\n\
          - NVIDIA: {}\n\
          - Intel Quick Sync: {}\n\
-         - AMD AMF: {}\n\
-         - Vulkan: {}\n\n",
+         - AMD AMF: {}\n\n",
                 hw_detected.h264_nvenc,
                 hw_detected.h264_qsv,
                 hw_detected.h264_amf,
-                hw_detected.h264_vulkan
+                //hw_detected.h264_vulkan
             );
 
             detailed_error += "Encoder test results:\n";
             detailed_error += &format!(
                 "- h264_nvenc: {}\n",
-                if encoder_availability.h264_nvenc { "SUCCESS" } else { "FAILED" }
+                if encoder_availability.h264_nvenc {
+                    "SUCCESS"
+                } else {
+                    "FAILED"
+                }
             );
             detailed_error += &format!(
                 "- hevc_nvenc: {}\n",
-                if encoder_availability.hevc_nvenc { "SUCCESS" } else { "FAILED" }
+                if encoder_availability.hevc_nvenc {
+                    "SUCCESS"
+                } else {
+                    "FAILED"
+                }
             );
             detailed_error += &format!(
                 "- av1_nvenc: {}\n",
-                if encoder_availability.av1_nvenc { "SUCCESS" } else { "FAILED" }
+                if encoder_availability.av1_nvenc {
+                    "SUCCESS"
+                } else {
+                    "FAILED"
+                }
             );
             detailed_error += &format!(
                 "- h264_qsv: {}\n",
-                if encoder_availability.h264_qsv { "SUCCESS" } else { "FAILED" }
+                if encoder_availability.h264_qsv {
+                    "SUCCESS"
+                } else {
+                    "FAILED"
+                }
             );
             detailed_error += &format!(
                 "- hevc_qsv: {}\n",
-                if encoder_availability.hevc_qsv { "SUCCESS" } else { "FAILED" }
+                if encoder_availability.hevc_qsv {
+                    "SUCCESS"
+                } else {
+                    "FAILED"
+                }
             );
             detailed_error += &format!(
                 "- av1_qsv: {}\n",
-                if encoder_availability.av1_qsv { "SUCCESS" } else { "FAILED" }
+                if encoder_availability.av1_qsv {
+                    "SUCCESS"
+                } else {
+                    "FAILED"
+                }
             );
             detailed_error += &format!(
                 "- h264_amf: {}\n",
-                if encoder_availability.h264_amf { "SUCCESS" } else { "FAILED" }
+                if encoder_availability.h264_amf {
+                    "SUCCESS"
+                } else {
+                    "FAILED"
+                }
             );
             detailed_error += &format!(
                 "- hevc_amf: {}\n",
-                if encoder_availability.hevc_amf { "SUCCESS" } else { "FAILED" }
+                if encoder_availability.hevc_amf {
+                    "SUCCESS"
+                } else {
+                    "FAILED"
+                }
             );
             detailed_error += &format!(
                 "- av1_amf: {}\n",
-                if encoder_availability.av1_amf { "SUCCESS" } else { "FAILED" }
+                if encoder_availability.av1_amf {
+                    "SUCCESS"
+                } else {
+                    "FAILED"
+                }
             );
-            detailed_error += &format!(
-                "- h264_vulkan: {}\n",
-                if encoder_availability.h264_vulkan { "SUCCESS" } else { "FAILED" }
-            );
-            detailed_error += &format!(
-                "- hevc_vulkan: {}\n",
-                if encoder_availability.hevc_vulkan { "SUCCESS" } else { "FAILED" }
-            );
-            detailed_error += &format!(
-                "- av1_vulkan: {}\n",
-                if encoder_availability.av1_vulkan { "SUCCESS" } else { "FAILED" }
-            );
+            // detailed_error += &format!(
+            //     "- h264_vulkan: {}\n",
+            //     if encoder_availability.h264_vulkan { "SUCCESS" } else { "FAILED" }
+            // );
+            // detailed_error += &format!(
+            //     "- hevc_vulkan: {}\n",
+            //     if encoder_availability.hevc_vulkan { "SUCCESS" } else { "FAILED" }
+            // );
+            // detailed_error += &format!(
+            //     "- av1_vulkan: {}\n",
+            //     if encoder_availability.av1_vulkan { "SUCCESS" } else { "FAILED" }
+            //);
             detailed_error += &format!(
                 "- h264_cuvid: {}\n",
-                if encoder_availability.h264_cuvid { "SUCCESS" } else { "FAILED" }
+                if encoder_availability.h264_cuvid {
+                    "SUCCESS"
+                } else {
+                    "FAILED"
+                }
             );
             detailed_error += &format!(
                 "- hevc_cuvid: {}\n",
-                if encoder_availability.hevc_cuvid { "SUCCESS" } else { "FAILED" }
+                if encoder_availability.hevc_cuvid {
+                    "SUCCESS"
+                } else {
+                    "FAILED"
+                }
             );
             detailed_error += &format!(
                 "- av1_cuvid: {}\n\n",
-                if encoder_availability.av1_cuvid { "SUCCESS" } else { "FAILED" }
+                if encoder_availability.av1_cuvid {
+                    "SUCCESS"
+                } else {
+                    "FAILED"
+                }
             );
 
             // 详细的错误日志
@@ -1374,7 +1683,10 @@ pub async fn main() -> Result<()> {
     }
     let global_args = "-y";
     let mut input_args = String::new();
-    write!(&mut input_args, "-f rawvideo -c:v rawvideo -s {vw}x{vh} -r {fps} -pix_fmt rgba -i - -i")?;
+    write!(
+        &mut input_args,
+        "-f rawvideo -c:v rawvideo -s {vw}x{vh} -r {fps} -pix_fmt rgba -i - -i"
+    )?;
 
     let ffmpeg_thread = if params.config.ffmpeg_thread {
         "-thread_queue_size 2048 "
@@ -1443,15 +1755,16 @@ pub async fn main() -> Result<()> {
     let mut proc = {
         let mut cmd = cmd_hidden(&ffmpeg);
         cmd.args(global_args.split_whitespace());
-        if is_vulkan_encoder
-        {
-            cmd.arg("-init_hw_device").arg("vulkan=vk")
-               .arg("-filter_hw_device").arg("vk");
+        if is_vulkan_encoder {
+            cmd.arg("-init_hw_device")
+                .arg("vulkan=vk")
+                .arg("-filter_hw_device")
+                .arg("vk");
         }
         cmd.args(input_args.split_whitespace())
             .arg(mixing_output.path())
             .args(args2.split_whitespace())
-            .arg(output_path)
+            .arg(&output_path)
             .arg("-loglevel")
             .arg("warning")
             .stdin(Stdio::piped())
@@ -1469,8 +1782,7 @@ pub async fn main() -> Result<()> {
     let mut pbos: Vec<GLuint> = vec![0; n];
     info!("Using {} PBOs for async readback (buffering strategy)", n);
 
-    unsafe
-    {
+    unsafe {
         use miniquad::gl::*;
         glGenBuffers(n as _, pbos.as_mut_ptr());
         for pbo in &pbos {
@@ -1485,8 +1797,6 @@ pub async fn main() -> Result<()> {
         glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
     }
 
-    send(IPCEvent::StartRender(frames));
-
     let fps_f64 = params.config.fps as f64;
     let frame_duration = 1.0 / fps_f64;
     let total_frames = frames;
@@ -1494,11 +1804,11 @@ pub async fn main() -> Result<()> {
     let frames10 = total_frames / 10;
     let mut step_time = Instant::now();
 
-    for frame in 0..total_frames
-    {
-        if frame % frames10 == 0 ||
-            frame == total_frames - 1
-        {
+    let mut current_pbo = 0;
+    let mut previous_pbo = 0;
+
+    for frame in 0..total_frames {
+        if frame % frames10 == 0 || frame == total_frames - 1 {
             let progress = (frame as f64 / total_frames as f64).min(1.0);
             let percent = (progress * 100.).ceil() as i8;
             let bar_width = 20;
@@ -1532,39 +1842,75 @@ pub async fn main() -> Result<()> {
         if current_frame_time <= LoadingScene::TOTAL_TIME as f64 && !params.config.disable_loading {
             draw_rectangle(0., 0., 0., 0., Color::default());
         }
-
+        
         if MSAA.load(Ordering::SeqCst) {
             mst.blit();
         }
-
+        
+        // ---- 多 PBO 轮换读写 ----
+        // 1. 处理上一帧（除非是第一帧）
+        if frame > 0 {
+            unsafe {
+                use miniquad::gl::*;
+                glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[previous_pbo]);
+                let src = glMapBufferRange(
+                    GL_PIXEL_PACK_BUFFER,
+                    0,
+                    rgba_size as GLsizeiptr,
+                    GL_MAP_READ_BIT,
+                );
+                if !src.is_null() {
+                    input.write_all(std::slice::from_raw_parts(src as *const u8, rgba_size))?;
+                    glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+                } else {
+                    bail!("Failed to map PBO at frame {}", frame);
+                }
+                glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+            }
+        }
+        
+        // 2. 发起当前帧的异步读取
         unsafe {
             use miniquad::gl::*;
             glBindFramebuffer(GL_READ_FRAMEBUFFER, internal_id(&mst.output()));
-            glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[0]);
-            //glFinish();
-
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[current_pbo]);
             glReadPixels(
-                0, 0,
-                vw as _, vh as _,
-                GL_RGBA, GL_UNSIGNED_BYTE,
-                std::ptr::null_mut()
+                0,
+                0,
+                vw as _,
+                vh as _,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                std::ptr::null_mut(),
             );
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+        }
+        
+        // 3. 轮换索引
+        previous_pbo = current_pbo;
+        current_pbo = (current_pbo + 1) % n;
+    }
 
-            let src = glMapBuffer(GL_PIXEL_PACK_BUFFER, 0x88B8);
+    // 处理所有还未写入的 PBO
+    for _ in 0..n {
+        unsafe {
+            use miniquad::gl::*;
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, pbos[previous_pbo]);
+            let src = glMapBufferRange(
+                GL_PIXEL_PACK_BUFFER,
+                0,
+                rgba_size as GLsizeiptr,
+                GL_MAP_READ_BIT,
+            );
             if !src.is_null() {
-                input.write_all(std::slice::from_raw_parts(
-                    src as *const u8,
-                    rgba_size
-                ))?;
+                input.write_all(std::slice::from_raw_parts(src as *const u8, rgba_size))?;
                 glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
-            } else {
-                bail!("Failed to map PBO at frame {}", frame);
             }
             glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
         }
-
-        send(IPCEvent::Frame);
+        previous_pbo = (previous_pbo + 1) % n;
     }
+
     drop(input);
     proc.wait()?;
 
@@ -1579,6 +1925,109 @@ pub async fn main() -> Result<()> {
         glDeleteBuffers(n as _, pbos.as_ptr());
     }
 
-    send(IPCEvent::Done(render_start_time.elapsed().as_secs_f64()));
+    println!("IPCEvent::Done(render_start_time.elapsed().as_secs_f64())");
+
+    println!("渲染完成，输出文件: {:?}", output_path);
     Ok(())
+}
+
+use clap::Parser;
+
+/// CLI 参数结构
+#[derive(Parser, Debug)]
+#[command(author, version, about)]
+pub struct CliArgs {
+    ///输入
+    #[arg(short, long)]
+    pub input: String,
+
+    ///输出
+    #[arg(short, long, default_value = "output.mp4")]
+    pub output: String,
+
+    ///分辨率
+    #[arg(short, long, default_value = "1920x1200")]
+    pub resolution: String,
+
+    ///crf
+    #[arg(short, long, default_value_t = 20)]
+    pub crf: u32,
+
+    //assets
+    #[clap(long, default_value = "/usr/lib/ptkc-assets")]
+    pub assets: String,
+
+    /// 背景变暗程度，0-100，100 为全黑（默认 40）
+    #[arg(long, default_value_t = 40)]
+    pub dark: u8,
+
+    /// 显示加载界面（默认隐藏）
+    #[arg(long, default_value_t = false)]
+    pub load: bool,
+
+    /// 在视频末尾显示结算界面（默认不显示）
+    #[arg(long, default_value_t = false)]
+    pub finish: bool,
+
+    /// 视频帧率（FPS），默认 30
+    #[arg(long, default_value_t = 30)]
+    pub fps: u32,
+}
+
+/// CLI 渲染入口
+pub async fn render_cli(args: CliArgs) -> Result<()> {
+    macroquad::file::set_pc_assets_folder(&args.assets);
+    let mut config = RenderConfig::default();
+    config.resolution = {
+        let parts: Vec<&str> = args.resolution.split('x').collect();
+        if parts.len() == 2 {
+            (
+                parts[0].parse().unwrap_or(1920),
+                parts[1].parse().unwrap_or(1080),
+            )
+        } else {
+            (1920, 1080)
+        }
+    };
+    config.fps = args.fps;
+    config.bitrate = args.crf.to_string();
+    config.hardware_accel = true;
+    config.video_codec = "h264".to_string();
+    config.encoder = "auto".to_string();
+    config.target_audio = 48000;
+    config.audio_format = "flac".to_string();
+    config.combo = "PHI-TK POWERED".to_string();
+    config.player_name.clear();
+    config.player_rks = 6.16;
+    config.ui_name = true;
+    config.ui_level = true;
+
+    config.disable_loading = !args.load;
+    if args.finish {
+        config.ending_length = 3.0;
+        config.ui_score = true;
+        config.ui_combo = true;
+        config.ui_pb = true;
+        config.ui_level = true;
+        config.ui_name = true;
+    }
+
+    let input_path = PathBuf::from(&args.input);
+    let mut chart_fs = fs::fs_from_file(&input_path)
+        .with_context(|| format!("无法打开谱面: {}", input_path.display()))?;
+    let mut info = fs::load_info(chart_fs.deref_mut())
+        .await
+        .with_context(|| format!("无法读取谱面元数据: {}", input_path.display()))?;
+
+    if args.dark > 0 {
+        info.background_dim = (args.dark as f32).clamp(0.0, 100.0) / 100.0;
+    }
+
+    let params = RenderParams {
+        path: input_path,
+        info,
+        config,
+    };
+
+    main_with_params(params, PathBuf::from(&args.output)).await
 }

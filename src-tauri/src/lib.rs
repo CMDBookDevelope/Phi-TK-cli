@@ -278,7 +278,11 @@ async fn preview_chart(params: RenderParams) -> Result<(), InvokeError> {
     .await
 }
 #[tauri::command]
-async fn post_render(queue: State<'_, TaskQueue>, params: RenderParams, output_path: Option<String>) -> Result<(), InvokeError> {
+async fn post_render(
+    queue: State<'_, TaskQueue>,
+    params: RenderParams,
+    output_path: Option<String>,
+) -> Result<(), InvokeError> {
     wrap_async(async move {
         let output_path = output_path.map(PathBuf::from);
         queue.post(params, output_path).await?;
@@ -327,24 +331,30 @@ fn get_respacks() -> Result<Vec<RespackInfo>, InvokeError> {
 #[tauri::command]
 async fn batch_add_tasks(
     queue: State<'_, TaskQueue>,
-    tasks: Vec<(String, String, Option<String>)> // (path, preset_name, output_path)
+    tasks: Vec<(String, String, Option<String>)>, // (path, preset_name, output_path)
 ) -> Result<(), InvokeError> {
     wrap_async(async move {
         for (path, preset_name, output_path) in tasks {
-            let mut presets = get_presets().await.map_err(|e| anyhow::anyhow!("Failed to get presets: {:?}", e))?;
-            let config = presets.remove(&preset_name).unwrap_or_else(|| {
-                create_default_render_config()
-            });
+            let mut presets = get_presets()
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to get presets: {:?}", e))?;
+            let config = presets
+                .remove(&preset_name)
+                .unwrap_or_else(|| create_default_render_config());
             let params = RenderParams {
                 path: PathBuf::from(path),
                 config,
                 info: ChartInfo::default(),
             };
             let output_path = output_path.map(PathBuf::from);
-            queue.post(params, output_path).await.map_err(|e| anyhow::anyhow!("Failed to post task: {:?}", e))?;
+            queue
+                .post(params, output_path)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to post task: {:?}", e))?;
         }
         Ok(())
-    }).await
+    })
+    .await
 }
 
 #[tauri::command]
@@ -367,7 +377,7 @@ async fn list_chart_files(path: PathBuf) -> Result<Vec<String>, InvokeError> {
         }
         Ok(files)
     })
-        .await
+    .await
 }
 
 pub fn create_default_render_config() -> RenderConfig {
