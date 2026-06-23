@@ -1,54 +1,39 @@
-# Phi TK
+# Phi TK CLI Edition
 ![render](arts/phi-tklogo.png)
 
 Phi-TK 是一个基于 Tauri + Vue 3 的谱面渲染工具。
+Phi-TK CLI 是一个基于 Phi-TK 的命令行渲染工具，不保证和 Phi-TK 一样多功能，也不保证和 Phi-TK 一样渲染效率
+*部分代码由AI修改/编写*
 
-## 功能特性
+## Phi-TK 功能特性: 详见[原仓库](https://github.com/Winamin/Phi-TK "？！强强 ！？")
 
+## Phi-TK CLI 支持的功能
 - 支持WAV无损音频
 - CRF码率控制
-- 铺面揭秘功能
-- 跨平台支持（Windows、Linux、macOS）
-- 现代化的用户界面，基于 Vue 3 + Vuetify
 - 支持Vulkan加速渲染
-- 手序分配AI引擎
-
-## 系统要求
 
 ### 通用要求
-- Node.js 18+ 
 - Rust 1.60+
-- pnpm
 
 ### 平台特定要求
-- **Windows**: Windows 10+ 
 - **Linux**: 支持现代桌面发行版
-- **macOS**: macOS 10.15+
 
 ## 安装步骤
 
 ### 1. 安装依赖
 
-#### 安装 Node.js
-从 [Node.js 官网](https://nodejs.org/) 下载并安装 Node.js 18 或更高版本。
-
 #### 安装 Rust
 从 [Rust 官网](https://rustup.rs/) 下载并安装 Rust。
 
-#### 安装 pnpm
+### 2. 克隆仓库主要代码 src-tauri 分支
 ```bash
-npm install -g pnpm
+git clone https://github.com/CMDBookDevelope/Phi-TK-cli/tree/main/src-tauri.git
+cd src-tauri
 ```
 
-### 2. 克隆仓库
+### 3. 更新项目依赖
 ```bash
-git clone https://github.com/Winamin/Phi-TK.git
-cd Phi-TK
-```
-
-### 3. 安装项目依赖
-```bash
-pnpm install
+cargo update
 ```
 
 ## 编译构建
