@@ -2,7 +2,7 @@
 ![Winamin最強! Winamin最高!](arts/phi-tk-clilogo.png) 
 
 Phi-TK 是一个基于 Tauri + Vue 3 的谱面渲染工具。
-<iframe src="/arts/logos.html"></iframe>
+<iframe src="logos.html"></iframe>
 <!---Rust小螃蟹好可爱wwwwwwww Tauri何意味神秘图标--->
 Phi-TK CLI 是一个基于 Phi-TK Tauri部分的命令行渲染工具，不保证和 Phi-TK 一样多功能，也不保证和 Phi-TK 一样渲染效率
 *部分代码由AI编写/修改*
