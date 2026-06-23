@@ -3,9 +3,10 @@
 
 set -euo pipefail
 
+#需要修改:
 APP_DIR="/usr/lib/phi-tk-cli"
 REAL_BIN="$APP_DIR/phi-tk-cli"
-DEFAULT_ASSETS="$APP_DIR/assets"
+DEFAULT_ASSETS="/usr/lib/ptkc-assets"
 
 cleanup() {
   if [ -n "${PHI_TK_XVFB_PID:-}" ]; then
