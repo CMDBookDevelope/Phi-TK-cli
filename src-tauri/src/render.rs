@@ -1957,7 +1957,7 @@ pub struct CliArgs {
     #[clap(long, default_value = "/usr/lib/ptkc-assets")]
     pub assets: String,
 
-    /// 背景变暗程度，0-100，100 为全黑（默认 40）
+    /// 背景亮度，0-100，100 为全黑（默认 40）
     #[arg(long, default_value_t = 40)]
     pub dark: u8,
 
