@@ -59,6 +59,7 @@ cargo build --release --bin phi-tk-cli
 ## 使用说明
 *需要搭配修改过的，贴合实际用户环境的wrapper.sh确保在无头环境运行*
 **command usage:**
+<!---
 ```bash
 phi-tk-cli # or wrapper.sh \
 --input your_chart.pez [required] \
@@ -71,6 +72,19 @@ phi-tk-cli # or wrapper.sh \
 --finish # default=off result screen [optional] \
 --assets # assets folder [optional] \
 ```
+--->
+### 自定义参数（都是可选的）
+| 参数 | 说明 | 范围 | 默认值 |
+|------|------|------|-----------|
+| `-i, --input` | 谱面文件路径 | FilePath | 自己填。。。我怎么知道你要渲染什么，，， |
+| `-o, --output` | 输出视频路径 | FilePath | output.mp4 |
+| `-r, --resolution` | 分辨率 | 整数x整数 | 1920x1440 |
+| `-c, --crf` | 渲染质量 | 整数 | 20 |
+| `--fps` | 帧率 | 整数 | 30 |
+| `-d, --dark` | 背景亮度 | 0-100 | 30 |
+| `-l, --load` | 显示加载界面 | 布尔 | False |
+| `--finish` | 显示结算界面 | 布尔 | False |
+| `-a, --assets` | 资源文件位置 | DirectoryPath | /usr/lib/ptkc-assets |
 
 ~~*摆烂了。。。申请查看[源代码](src-tauri/src/render.rs#L1939-L1975 "1939工作室快让美芬死一死。")*~~
 
