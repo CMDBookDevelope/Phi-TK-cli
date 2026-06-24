@@ -116,6 +116,7 @@ Phi-TK-cli/
 本项目采用 GNU v3.0 开源许可证，详见 LICENSE 文件。
 
 ## 相关链接
+*请给这些仓库点一个免费的Star✨!*
 
 - [Phi-TK](https://github.com/Winamin/Phi-TK "🐲")
 - [Phi-TK-render-lib](https://github.com/Winamin/Phi-TK-render-lib "龍龍龍")
