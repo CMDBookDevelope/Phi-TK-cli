@@ -15,6 +15,10 @@ fn window_conf() -> Conf {
 // 使用 window_conf 函数返回 Conf，设置 headless: true
 #[macroquad::main(window_conf)]
 async fn main() {
+    //Set REQUIRED args to enable egl...
+    std::env::set_var("EGL_PLATFORM", "surfaceless");
+    std::env::remove_var("DISPLAY");
+    
     let args = CliArgs::parse();
     macroquad::file::set_pc_assets_folder(&args.assets);
 
