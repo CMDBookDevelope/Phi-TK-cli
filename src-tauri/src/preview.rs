@@ -1,0 +1,125 @@
+use crate::render::{build_player, RenderParams};
+use anyhow::Result;
+use macroquad::prelude::*;
+use prpr::{
+    config::Mods,
+    fs,
+    scene::{show_error, GameMode, LoadingScene, NextScene, Scene},
+    time::TimeManager,
+    ui::{FontArc, TextPainter, Ui},
+    Main,
+};
+use std::io::BufRead;
+struct BaseScene(Option<NextScene>, bool);
+impl Scene for BaseScene {
+    fn on_result(&mut self, _tm: &mut TimeManager, result: Box<dyn std::any::Any>) -> Result<()> {
+        show_error(
+            result
+                .downcast::<anyhow::Error>()
+                .unwrap()
+                .context("loading failed"),
+        );
+        self.1 = true;
+        Ok(())
+    }
+    fn enter(&mut self, _tm: &mut TimeManager, _target: Option<RenderTarget>) -> Result<()> {
+        if self.0.is_none() && !self.1 {
+            self.0 = Some(NextScene::Exit);
+        }
+        Ok(())
+    }
+    fn update(&mut self, _tm: &mut TimeManager) -> Result<()> {
+        Ok(())
+    }
+    fn render(&mut self, _tm: &mut TimeManager, _ui: &mut Ui) -> Result<()> {
+        Ok(())
+    }
+    fn next_scene(&mut self, _tm: &mut TimeManager) -> prpr::scene::NextScene {
+        self.0.take().unwrap_or_default()
+    }
+}
+
+pub async fn main() -> Result<()> {
+    set_pc_assets_folder(&std::env::args().nth(2).unwrap());
+
+    let mut stdin = std::io::stdin().lock();
+    let stdin = &mut stdin;
+
+    let mut line = String::new();
+    stdin.read_line(&mut line)?;
+    let params: RenderParams = serde_json::from_str(line.trim())?;
+
+    let fs = fs::fs_from_file(&params.path)?;
+    let info = params.info;
+    let mut config = params.config.to_config();
+    if config.autoplay.unwrap_or(false) {
+        config.mods |= Mods::AUTOPLAY;
+    } else {
+        config.mods &= !Mods::AUTOPLAY;
+    }
+
+    let font = FontArc::try_from_vec(load_file("font.ttf").await?)?;
+    let mut painter = TextPainter::new(font);
+
+    let player = build_player(&params.config).await?;
+
+    let tm = TimeManager::default();
+    let ctm = TimeManager::from_config(&config); // strange variable name...
+    let config_ref = &config;
+    let mut main = Main::new(
+        Box::new(BaseScene(
+            Some(NextScene::Overlay(Box::new(
+                LoadingScene::new(
+                    GameMode::Normal,
+                    info,
+                    config_ref.clone(),
+                    fs,
+                    Some(player),
+                    None,
+                    None,
+                )
+                .await?,
+            ))),
+            false,
+        )),
+        ctm,
+        None,
+    )
+    .await?;
+    let mut fps_time = -1;
+    let mut is_fullscreen = false;
+    let mut frame_times = Vec::with_capacity(100);
+    //let mut avg_fps = 0.0;
+    'app: loop {
+        let frame_start = tm.real_time();
+        if is_key_pressed(KeyCode::F11) {
+            is_fullscreen = !is_fullscreen;
+            set_fullscreen(is_fullscreen);
+        }
+        main.update()?;
+        main.render(&mut painter)?;
+        if main.should_exit() {
+            break 'app;
+        }
+        let t = tm.real_time();
+        let frame_time = t - frame_start; // 当前帧耗时（秒）
+                                          // 存储帧时间
+        frame_times.push(frame_time);
+        if frame_times.len() > 100 {
+            frame_times.remove(0);
+        }
+        // 计算平均帧时间
+        let avg_frame_time: f64 = frame_times.iter().sum::<f64>() / frame_times.len() as f64;
+        let current_fps = 1.0 / frame_time;
+        let avg_fps = 1.0 / avg_frame_time;
+        let fps_now = t as i32;
+        if fps_now != fps_time {
+            fps_time = fps_now;
+            info!("| {} | {:.1}", current_fps as u32, avg_fps);
+        }
+
+        next_frame().await;
+    }
+
+    Ok(())
+}
