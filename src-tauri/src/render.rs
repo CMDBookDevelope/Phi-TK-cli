@@ -15,6 +15,7 @@ use macroquad::{
     },
     prelude::*,
 };
+use std::sync::Once;
 use prpr::{
     config::{ChallengeModeColor, Config, Mods},
     core::{internal_id, MSRenderTarget, NoteKind},
@@ -27,6 +28,10 @@ use prpr::{
     Main,
 };
 use sasa::AudioClip;
+use indicatif::{ProgressBar, ProgressStyle};
+use log::{Level, LevelFilter, info};
+use env_logger::{Builder, Target, Env};
+use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::{
@@ -41,6 +46,8 @@ use std::{
 };
 use std::{ffi::OsStr, fmt::Write as _};
 use tempfile::NamedTempFile;
+
+static INIT: Once = Once::new();
 
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -105,6 +112,14 @@ pub struct RenderConfig {
     //ffmpeg
     pub ffmpeg_thread: bool,
 }
+
+    fn stderr_for_loglevel() -> Stdio {
+        if log::max_level() >= LevelFilter::Debug {
+            Stdio::inherit()
+        } else {
+            Stdio::null()
+        }
+    }
 
 impl Default for RenderConfig {
     fn default() -> Self {
@@ -444,7 +459,7 @@ pub fn find_ffmpeg() -> Result<Option<String>> {
         }
     }
 
-    eprintln!("Failed to find global ffmpeg. Using bundled ffmpeg");
+    log::warn!("Failed to find global ffmpeg. Using bundled ffmpeg");
     Ok(if test(&bundled_ffmpeg) {
         Some(bundled_ffmpeg.to_string_lossy().into_owned())
     } else {
@@ -458,6 +473,18 @@ pub async fn main() -> Result<()> {
 }
 
 pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Result<()> {
+    init_colored_logger();
+    // 清空屏幕并重置光标位置
+    print!("\x1B[2J\x1B[1;1H");
+    io::stdout().flush()?;
+    
+    log::info!("Env_logger successfully initialized!");
+    //Set REQUIRED args to enable egl...
+    unsafe{
+        std::env::set_var("EGL_PLATFORM", "surfaceless");
+        std::env::remove_var("DISPLAY");
+    }
+    
     let path = params.path;
 
     let mut fs = fs::fs_from_file(&path)?;
@@ -465,9 +492,10 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
     let font = FontArc::try_from_vec(load_file("font.ttf").await?)?;
 
     let Some(ffmpeg) = find_ffmpeg()? else {
-        bail!("FFmpeg not found")
+        log::error!("FFmpeg not found");
+        return Err(anyhow::anyhow!("FFmpeg not found"));
     };
-    info!("Using ffmpeg: {}", ffmpeg);
+    log::debug!("Using ffmpeg: {}", ffmpeg);
 
     let mut painter = TextPainter::new(font);
 
@@ -501,7 +529,7 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
 
     let render_start_time = Instant::now();
 
-    println!("IPCEvent::StartMixing");
+    log::debug!("IPCEvent::StartMixing");
     let mixing_output = NamedTempFile::new()?;
     let target_sample_rate = params.config.target_audio;
     let sample_rate = 44100;
@@ -515,19 +543,19 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
     let frame_duration = 1.0 / fps_f64;
     let audio_delay = params.config.audio_delay_frames as f64 * frame_duration;
 
-    info!("=== Audio/Video Sync Configuration ===");
-    info!("  Audio delay: {} frames", params.config.audio_delay_frames);
-    info!("  Audio delay: {:.6} seconds", audio_delay);
-    info!(
+    log::debug!("=== Audio/Video Sync Configuration ===");
+    log::debug!("  Audio delay: {} frames", params.config.audio_delay_frames);
+    log::debug!("  Audio delay: {:.6} seconds", audio_delay);
+    log::debug!(
         "  Frame duration: {:.6}s @ {}fps",
         frame_duration, params.config.fps
     );
-    info!(
+    log::debug!(
         "  Sample delay: {} samples @ {}Hz",
         (audio_delay * sample_rate_f64).round() as i64,
         sample_rate
     );
-    info!("======================================");
+    log::debug!("======================================");
 
     let audio_buffer_length = video_length + audio_delay.abs();
     let mut output = vec![0.0_f32; (audio_buffer_length * sample_rate_f64).ceil() as usize * 2];
@@ -537,7 +565,7 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
         let original_pos = O - chart.offset.min(0.) as f64;
         let pos = original_pos + audio_delay;
 
-        info!(
+        log::debug!(
             "Music mixing: original_pos={:.6}s, delayed_pos={:.6}s",
             original_pos, pos
         );
@@ -547,7 +575,7 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
         let ratio = 1.0 / sample_rate_f64;
 
         if start_index >= output.len() {
-            warn!(
+            log::warn!(
                 "Music start position {} exceeds output buffer length {}",
                 start_index,
                 output.len()
@@ -570,7 +598,7 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
                 time += ratio;
             }
         }
-        info!("music Time:{:?}", start_time.elapsed());
+        log::debug!("music Time:{:?}", start_time.elapsed());
     }
 
     let mut place = |pos: f64, clip: &AudioClip, volume: f32| {
@@ -601,7 +629,7 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
         let offset_f64 = offset as f64;
         let o_offset = O + offset_f64 + audio_delay;
 
-        info!(
+        log::debug!(
             "SFX mixing: offset={:.6}s (includes {:.6}s delay)",
             o_offset, audio_delay
         );
@@ -633,11 +661,11 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
             }
         }
 
-        info!("sfx Time:{:?}", start_time.elapsed());
+        log::debug!("sfx Time:{:?}", start_time.elapsed());
     }
 
     let mut pos = O + length + A + audio_delay;
-    info!("Ending music start: {:.6}s", pos);
+    log::debug!("Ending music start: {:.6}s", pos);
 
     while place(pos, &ending, volume_music) != 0 && params.config.ending_length > 0.1 {
         pos += ending.frame_count() as f64 / sample_rate_f64;
@@ -649,7 +677,7 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
     // 验证输入
     let supported_formats = ["flac", "mp3", "aac", "opus", "wav"];
     if !supported_formats.contains(&audio_format.as_str()) {
-        bail!(
+        log::error!(
             "Unsupported audio format: {}. Supported formats are: {}",
             audio_format,
             supported_formats.join(", ")
@@ -658,10 +686,11 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
 
     if let Some(bit) = audio_bit {
         if ![16, 24, 32].contains(&bit) {
-            bail!(
+            log::error!(
                 "Invalid audio bit depth: {}. Supported values are 16, 24, 32.",
                 bit
             );
+            return Err(anyhow::anyhow!("Invalid audio bit depth: {}. Supported values are 16, 24, 32.", bit));
         }
         if audio_format != "wav" {
             return Err(anyhow::anyhow!(
@@ -681,7 +710,7 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
             "opus" => ("libopus".to_string(), "opus".to_string()),
             "wav" => ("pcm_f16le".to_string(), "wav".to_string()),
             _ => {
-                warn!(
+                log::error!(
                     "Unknown audio format '{}', using AAC/MP4 as default",
                     audio_format
                 );
@@ -706,14 +735,14 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
             sample_rate, audio_codec, output_format
         )
     };
-
+        
     let mut proc = cmd_hidden(&ffmpeg)
         .args(args_str.split_whitespace())
         .arg(mixing_output.path())
         .arg("-loglevel")
         .arg("warning")
         .stdin(Stdio::piped())
-        .stderr(Stdio::inherit())
+        .stderr(stderr_for_loglevel())
         .spawn()
         .with_context(|| tl!("run-ffmpeg-failed"))?;
     let input = proc.stdin.as_mut().unwrap();
@@ -724,9 +753,9 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
     drop(writer);
     proc.wait()?;
 
-    //let (vw, vh) = params.config.resolution;
+    let (vw, vh) = params.config.resolution;
 
-    let target_aspect = info.aspect_ratio as f64;
+    /*let target_aspect = info.aspect_ratio as f64;
     let (mut vw, mut vh) = params.config.resolution;
     let (ow, oh) = (vw, vh);
     let current_aspect = vw as f64 / vh as f64;
@@ -737,11 +766,11 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
         } else {
             vh = (vw as f64 / target_aspect).round() as u32;
         }
-        info!(
+        log::info!(
             "{}x{} -> {}x{} (target {:.9})",
             ow, oh, vw, vh, target_aspect
         );
-    }
+    }*/ //Bug: remapping resolution using aspect_ratio
 
     let mst = Rc::new(MSRenderTarget::new((vw, vh), config.sample_count));
     let my_time: Rc<RefCell<f64>> = Rc::new(RefCell::new(0.));
@@ -781,7 +810,15 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
     let fps = params.config.fps;
     //let frame_delta = 1. / fps as f32;
     let frames = (video_length * fps as f64).ceil() as u64;
-    println!("IPCEvent::StartRender(frames)");
+    let total_frames = frames;
+    let pb = ProgressBar::new(total_frames);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} frames ({eta})")
+            .unwrap()
+            .progress_chars("#>-"),
+    );
+    log::info!("IPCEvent::StartRender({})", frames);
     /*
         let codecs = String::from_utf8(
             cmd_hidden(&ffmpeg)
@@ -843,7 +880,7 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
         );
     */
 
-    fn test_encoder(ffmpeg: &Path, encoder: &str) -> Result<(bool, String)> {
+    let test_encoder = |ffmpeg: &Path, encoder: &str| -> Result<(bool, String)> {
         let mut cmd = Command::new(ffmpeg);
 
         // Vulkan 编码器需要特殊的初始化命令
@@ -892,7 +929,7 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
 
         let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
         Ok((output.status.success(), stderr))
-    }
+    };
 
     let hw_detected = EncoderAvailability {
         h264_nvenc: params.config.hardware_accel && hw_detect::detect_nvidia(),
@@ -1068,8 +1105,8 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
                     container_format,
                     "-", // 输出到stdout
                 ])
-                .stdout(Stdio::piped())
-                .stderr(Stdio::null());
+                .stdout(stderr_for_loglevel())
+                .stderr(stderr_for_loglevel());
 
             // 2. 解码测试
             let mut decode_cmd = Command::new(&ffmpeg);
@@ -1090,8 +1127,8 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
                     "-", // 输出到null
                 ])
                 .stdin(Stdio::piped())
-                .stdout(Stdio::null())
-                .stderr(Stdio::piped());
+                .stdout(stderr_for_loglevel())
+                .stderr(stderr_for_loglevel());
 
             let encoded = match encode_cmd.spawn() {
                 Ok(child) => child,
@@ -1434,7 +1471,7 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
         .map(|&(name, _, _)| name)
         .expect("At least one software encoder is available.");
 
-    info!(
+    log::debug!(
         "=== Encoder Selection ===\n\
         Video codec: {}\n\
         User preference: {}\n\
@@ -1450,7 +1487,8 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
         av1_nvenc: {}\n\
         av1_qsv: {}\n\
         av1_amf: {}\n\
-        av1_vulkan: {}",
+        av1_vulkan: {}\n\
+        =========================",
         params.config.video_codec,
         params.config.encoder,
         encoder_availability.h264_nvenc,
@@ -1467,13 +1505,14 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
         encoder_availability.av1_vulkan,
     );
     if !hw_errors.is_empty() {
-        info!("  --- Encoder Errors ---");
+        log::error!("  --- Encoder Errors ---");
         for error in &hw_errors {
-            info!("    {}", error);
+            log::error!("    {}", error);
         }
     }
-    info!("  Selected encoder: {}", ffmpeg_encoder);
-    info!("=========================");
+    log::info!("=========================");
+    log::info!("  Selected encoder: {}", ffmpeg_encoder);
+    log::info!("=========================");
 
     let ffmpeg_preset = match ffmpeg_encoder {
         "h264_amf" | "hevc_amf" | "av1_amf" => "-quality",
@@ -1680,7 +1719,8 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
                 detailed_error += "No hardware encoders were tested (all detection failed).\n\n";
             }
 
-            bail!(detailed_error);
+            log::error!("{}", detailed_error);
+            return Err(anyhow::anyhow!(detailed_error));
         }
     }
     let global_args = "-y";
@@ -1770,19 +1810,19 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
             .arg("-loglevel")
             .arg("warning")
             .stdin(Stdio::piped())
-            .stderr(Stdio::inherit())
+            .stderr(stderr_for_loglevel())
             .spawn()
             .with_context(|| tl!("run-ffmpeg-failed"))?
     };
     let mut input = proc.stdin.take().unwrap();
 
     let rgba_size = vw as usize * vh as usize * 4;
-    info!("RGBA buffer size: {}", rgba_size);
+    log::debug!("RGBA buffer size: {}", rgba_size);
 
     const MAX_PBO_COUNT: usize = 4;
     let n = MAX_PBO_COUNT.min(fps as usize).max(2);
     let mut pbos: Vec<GLuint> = vec![0; n];
-    info!("Using {} PBOs for async readback (buffering strategy)", n);
+    log::debug!("Using {} PBOs for async readback (buffering strategy)", n);
 
     unsafe {
         use miniquad::gl::*;
@@ -1810,6 +1850,7 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
     let mut previous_pbo = 0;
 
     for frame in 0..total_frames {
+        pb.inc(1);
         if frame % frames10 == 0 || frame == total_frames - 1 {
             let progress = (frame as f64 / total_frames as f64).min(1.0);
             let percent = (progress * 100.).ceil() as i8;
@@ -1822,16 +1863,6 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
             } else {
                 format!("{:.2}s", step_time.elapsed().as_secs_f32())
             };
-
-            info!(
-                "Rendering: [{}{}] {:>3}% | Time: {} | Frames: {}/{}",
-                "█".repeat(filled),
-                " ".repeat(empty),
-                percent,
-                time_text,
-                frame + 1,
-                total_frames
-            );
             step_time = Instant::now();
         }
         let current_frame_time = frame as f64 * frame_duration;
@@ -1865,7 +1896,8 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
                     input.write_all(std::slice::from_raw_parts(src as *const u8, rgba_size))?;
                     glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
                 } else {
-                    bail!("Failed to map PBO at frame {}", frame);
+                    log::error!("Failed to map PBO at frame {}", frame);
+                    return Err(anyhow::anyhow!("Failed to map PBO at frame {}", frame));
                 }
                 glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
             }
@@ -1916,8 +1948,8 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
     drop(input);
     proc.wait()?;
 
-    info!("Render Time: {:.2?}", render_start_time.elapsed());
-    info!(
+    log::info!("Render Time: {:.2?}", render_start_time.elapsed());
+    log::info!(
         "Average FPS: {:.2}",
         total_frames as f64 / render_start_time.elapsed().as_secs_f64()
     );
@@ -1927,9 +1959,15 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
         glDeleteBuffers(n as _, pbos.as_ptr());
     }
 
-    println!("IPCEvent::Done(render_start_time.elapsed().as_secs_f64())");
+    log::debug!("IPCEvent::Done(render_start_time.elapsed().as_secs_f64())");
 
-    println!("渲染完成，输出文件: {:?}", output_path);
+    log::info!("渲染完成，输出文件: {:?}", output_path);
+    
+    //DROP!!!!!
+    drop(main);
+    drop(mst);
+    drop(painter);
+    
     Ok(())
 }
 
@@ -1985,7 +2023,7 @@ pub async fn render_cli(args: CliArgs) -> Result<()> {
         if parts.len() == 2 {
             (
                 parts[0].parse().unwrap_or(1920),
-                parts[1].parse().unwrap_or(1080),
+                parts[1].parse().unwrap_or(1200),
             )
         } else {
             (1280, 720)
@@ -2032,4 +2070,48 @@ pub async fn render_cli(args: CliArgs) -> Result<()> {
     };
 
     main_with_params(params, PathBuf::from(&args.output)).await
+}
+
+pub fn init_colored_logger() {
+    INIT.call_once(|| {
+        let env = Env::default().filter_or("RUST_LOG", "info");
+        let mut builder = Builder::new();
+
+        builder.target(env_logger::Target::Stdout);
+        builder.format(|buf, record| {
+            let level = record.level();
+
+            let custom_name = match level {
+                Level::Error => "(｀皿´＃).",
+                Level::Warn  => "(╬ Ò﹏Ó).",
+                Level::Info  => "(*・ω・)っ.",
+                Level::Debug => "≽^•⩊•^≼.",
+                Level::Trace => "(◎_◎).",
+            };
+
+            let level_abbr = match level {
+                Level::Error => "log::error!".red(),
+                Level::Warn  => "log::warn!".yellow(),
+                Level::Info  => "INFO~".cyan(),
+                Level::Debug => "DEBUG:".green(),
+                Level::Trace => "TRACE-".magenta(),
+            };
+
+            let fixed_custom_name = custom_name.bright_black();
+            let colored_level = level_abbr.bold();
+            let connect = "->".bright_magenta();
+
+            // Output Structure
+            writeln!(
+                buf,
+                "{}{}{}{}",
+                fixed_custom_name,
+                colored_level,
+                connect,
+                record.args()
+            )
+        });
+
+        builder.init();
+    });
 }
