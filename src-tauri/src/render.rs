@@ -28,7 +28,7 @@ use prpr::{
     Main,
 };
 use sasa::AudioClip;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{ProgressBar, ProgressStyle, ProgressDrawTarget};
 use log::{Level, LevelFilter, info, warn, error, debug, trace};
 use env_logger::{Builder, Target, Env};
 use colored::Colorize;
@@ -826,7 +826,7 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
     let frames = (video_length * fps as f64).ceil() as u64;
     let total_frames = frames;
     let draw_target = ProgressDrawTarget::stderr();
-    let pb = ProgressBar::new(total_frames, draw_target);
+    let pb = ProgressBar::with_draw_target(Some(total_frames), draw_target);
     pb.set_style(
         ProgressStyle::default_bar()
             .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} frames ({eta})")
