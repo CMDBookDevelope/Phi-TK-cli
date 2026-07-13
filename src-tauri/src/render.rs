@@ -829,8 +829,6 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
     let pb = ProgressBar::with_draw_target(Some(total_frames), draw_target);
     pb.set_style(
         ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} frames ({eta})")
-            .unwrap()
             .progress_chars("#>_"),
     );
     log::info!("IPCEvent::StartRender({})", frames);
@@ -1749,6 +1747,7 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
 
     for frame in 0..total_frames {
         pb.inc(1);
+        debug!("progress bar successfully initialized");
         if frame % frames10 == 0 || frame == total_frames - 1 {
             let progress = (frame as f64 / total_frames as f64).min(1.0);
             let percent = (progress * 100.).ceil() as i8;
@@ -1867,9 +1866,9 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
     );
     
     prpr::cleanup_billboard();
-    std::process::exit(0); // 立即退出，避免其他 TLS 析构在 GL 上下文销毁后执行
+    std::process::exit(0);
     
-    Ok(())
+    return Ok(());
 }
 
 use clap::Parser;
@@ -1976,6 +1975,7 @@ pub async fn render_cli(args: CliArgs) -> Result<()> {
 pub fn init_colored_logger() {
     INIT.call_once(|| {
         let mut builder = env_logger::Builder::from_env(Env::default().default_filter_or("info"));
+        builder.filter(Some("symphonia"), log::LevelFilter::Warn);
         builder.target(env_logger::Target::Stdout);
         builder.format(|buf, record| {
             let level = record.level();
@@ -1996,12 +1996,16 @@ pub fn init_colored_logger() {
             writeln!(
                 buf,
                 "{}{}{}{}",
+                //"{}{}{}[{}:{}] {}",
                 custom_name.bright_black(),
                 level_abbr.bold(),
                 " ♡ ".bright_magenta(),
+                //record.file().unwrap_or("?"),
+                //record.line().unwrap_or(0),
                 record.args()
             )
         });
+
         builder.init();
     });
 }
@@ -2075,3 +2079,5 @@ fn split_line_println(fill: char, title: Option<&str>) -> String {
 
     format!("{left}{text}{right}")
 }
+
+
