@@ -1843,11 +1843,6 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
 
     log::info!("渲染完成，输出文件: {:?}", output_path);
     
-    //DROP!!!!!
-    drop(main);
-    drop(mst);
-    drop(painter);
-    
     Ok(())
 }
 
