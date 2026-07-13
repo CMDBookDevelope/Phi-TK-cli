@@ -1843,6 +1843,9 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
 
     log::info!("渲染完成，输出文件: {:?}", output_path);
     
+    prpr::cleanup_billboard();
+    std::process::exit(0); // 立即退出，避免其他 TLS 析构在 GL 上下文销毁后执行
+    
     Ok(())
 }
 
