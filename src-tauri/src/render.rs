@@ -831,6 +831,7 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
         ProgressStyle::default_bar()
             .progress_chars("#>_"),
     );
+    debug!("progress bar successfully created");
     log::info!("IPCEvent::StartRender({})", frames);
     /*
         let codecs = String::from_utf8(
@@ -1747,7 +1748,6 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
 
     for frame in 0..total_frames {
         pb.inc(1);
-        debug!("progress bar successfully initialized");
         if frame % frames10 == 0 || frame == total_frames - 1 {
             let progress = (frame as f64 / total_frames as f64).min(1.0);
             let percent = (progress * 100.).ceil() as i8;
