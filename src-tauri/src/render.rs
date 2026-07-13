@@ -546,19 +546,30 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
     let frame_duration = 1.0 / fps_f64;
     let audio_delay = params.config.audio_delay_frames as f64 * frame_duration;
 
-    debug!("{:=^8}", " Audio/Video Sync Configuration s");
-    debug!("{:^8}", format_args!("Audio delay: {} frames", params.config.audio_delay_frames));
-    debug!("{:^8}", format_args!("Audio delay: {:.6} seconds", audio_delay));
-    debug!("{:^8}", format_args!(
-        "Frame duration: {:.6}s @ {}fps",
-        frame_duration, params.config.fps
-    ));
-    debug!("{:^8}", format_args!(
-        "Sample delay: {} samples @ {}Hz",
-        (audio_delay * sample_rate_f64).round() as i64,
-        sample_rate
-    ));
-    debug!("{:=^8}", "=");
+    debug!("{}", split_line('=', Some(" Audio/Video Sync Configuration s")));
+    debug!("{}", split_line(' ', Some(format!("Audio delay: {} frames", params.config.audio_delay_frames).as_str())));
+    debug!("{}", split_line(' ', Some(format!("Audio delay: {:.6} seconds", audio_delay).as_str())));
+    debug!("{}",
+        split_line(' ',
+            Some(
+                format!(
+                "Frame duration: {:.6}s @ {}fps",
+                frame_duration, params.config.fps
+                ).as_str()
+            )
+        )
+    );
+    debug!("{}",
+        split_line(' ',
+            Some(
+                format!(
+                    "Sample delay: {} samples @ {}Hz",
+                    (audio_delay * sample_rate_f64).round() as i64, sample_rate
+                ).as_str()
+            )
+        )
+    );
+    debug!("{}", split_line('=', None));
 
     let audio_buffer_length = video_length + audio_delay.abs();
     let mut output = vec![0.0_f32; (audio_buffer_length * sample_rate_f64).ceil() as usize * 2];
@@ -814,7 +825,8 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
     //let frame_delta = 1. / fps as f32;
     let frames = (video_length * fps as f64).ceil() as u64;
     let total_frames = frames;
-    let pb = ProgressBar::new(total_frames);
+    let draw_target = ProgressDrawTarget::stderr();
+    let pb = ProgressBar::new(total_frames, draw_target);
     pb.set_style(
         ProgressStyle::default_bar()
             .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} frames ({eta})")
@@ -1475,32 +1487,32 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
         .expect("At least one software encoder is available.");
 
 
-    debug!("{:=^8}", " Encoder Selection ");
-    debug!("{:^8}", format_args!("Video codec: {}", params.config.video_codec));
-    debug!("{:^8}", format_args!("User preference: {}", params.config.encoder));
-    debug!("{:-^8}", " Encoder Availability ");
-    debug!("{:^8}", format_args!("h264_nvenc: {}", encoder_availability.h264_nvenc));
-    debug!("{:^8}", format_args!("h264_qsv: {}", encoder_availability.h264_qsv));
-    debug!("{:^8}", format_args!("h264_amf: {}", encoder_availability.h264_amf));
-    debug!("{:^8}", format_args!("h264_vulkan: {}", encoder_availability.h264_vulkan));
-    debug!("{:^8}", format_args!("hevc_nvenc: {}", encoder_availability.hevc_nvenc));
-    debug!("{:^8}", format_args!("hevc_qsv: {}", encoder_availability.hevc_qsv));
-    debug!("{:^8}", format_args!("hevc_amf: {}", encoder_availability.hevc_amf));
-    debug!("{:^8}", format_args!("hevc_vulkan: {}", encoder_availability.hevc_vulkan));
-    debug!("{:^8}", format_args!("av1_nvenc: {}", encoder_availability.av1_nvenc));
-    debug!("{:^8}", format_args!("av1_qsv: {}", encoder_availability.av1_qsv));
-    debug!("{:^8}", format_args!("av1_amf: {}", encoder_availability.av1_amf));
-    debug!("{:^8}", format_args!("av1_vulkan: {}", encoder_availability.av1_vulkan));
-    debug!("{:=^8}", "=");
+    debug!("{}", split_line('=', Some(" Encoder Selection ")));
+    debug!("{}", split_line(' ', Some(format!("Video codec: {}", params.config.video_codec).as_str())));
+    debug!("{}", split_line(' ', Some(format!("User preference: {}", params.config.encoder).as_str())));
+    debug!("{}", split_line(' ', Some(" Encoder Availability ")));
+    debug!("{}", split_line(' ', Some(format!("h264_nvenc: {}", encoder_availability.h264_nvenc).as_str())));
+    debug!("{}", split_line(' ', Some(format!("h264_qsv: {}", encoder_availability.h264_qsv).as_str())));
+    debug!("{}", split_line(' ', Some(format!("h264_amf: {}", encoder_availability.h264_amf).as_str())));
+    debug!("{}", split_line(' ', Some(format!("h264_vulkan: {}", encoder_availability.h264_vulkan).as_str())));
+    debug!("{}", split_line(' ', Some(format!("hevc_nvenc: {}", encoder_availability.hevc_nvenc).as_str())));
+    debug!("{}", split_line(' ', Some(format!("hevc_qsv: {}", encoder_availability.hevc_qsv).as_str())));
+    debug!("{}", split_line(' ', Some(format!("hevc_amf: {}", encoder_availability.hevc_amf).as_str())));
+    debug!("{}", split_line(' ', Some(format!("hevc_vulkan: {}", encoder_availability.hevc_vulkan).as_str())));
+    debug!("{}", split_line(' ', Some(format!("av1_nvenc: {}", encoder_availability.av1_nvenc).as_str())));
+    debug!("{}", split_line(' ', Some(format!("av1_qsv: {}", encoder_availability.av1_qsv).as_str())));
+    debug!("{}", split_line(' ', Some(format!("av1_amf: {}", encoder_availability.av1_amf).as_str())));
+    debug!("{}", split_line(' ', Some(format!("av1_vulkan: {}", encoder_availability.av1_vulkan).as_str())));
+    debug!("{}", split_line('=', None));
     if !hw_errors.is_empty() {
-        error!("{:-^8}", " Encoder Errors ");
+        error!("{}", split_line('-', Some(" Encoder Errors ")));
         for error in &hw_errors {
             error!("    {}", error);
         }
     }
-    log::info!("{:=^8}", "=");
-    log::info!("{:^8}", format_args!("Selected encoder: {}", ffmpeg_encoder));
-    log::info!("{:=^8}", "=");
+    log::info!("{}", split_line('=', None));
+    log::info!("{}", split_line(' ', Some(format!("Selected encoder: {}", ffmpeg_encoder).as_str())));
+    log::info!("{}", split_line('=', None));
 
     let ffmpeg_preset = match ffmpeg_encoder {
         "h264_amf" | "hevc_amf" | "av1_amf" => "-quality",
@@ -1849,8 +1861,8 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
     
     println!(
         "\n\n\n{} {}{:?}",
-        "[渲染完成]".green().bold(),
-        "输出文件:".cyan(),
+        split_line_println('#', Some(&"[渲染完成]".green().bold())),
+        "\n输出文件:".cyan(),
         output_path
     );
     
@@ -1996,33 +2008,70 @@ pub fn init_colored_logger() {
 
 pub fn welcome_logger() {
     println!("\n\n\n");
-    log::info!("{:^8}", "_|_|_|    _|        _|          _|_|_|_|_|  _|    _|  ");
-    log::info!("{:^8}", "_|    _|  _|_|_|                    _|      _|  _|    ");
-    log::info!("{:^8}", "_|_|_|    _|    _|  _|  _|_|_|_|    _|      _|_|      ");
-    log::info!("{:^8}", "_|        _|    _|  _|              _|      _|  _|    ");
-    log::info!("{:^8}", "_|        _|    _|  _|              _|      _|    _|  ");
+    log::info!("{}", split_line(' ', Some("_|_|_|    _|        _|          _|_|_|_|_|  _|    _|  ")));
+    log::info!("{}", split_line(' ', Some("_|    _|  _|_|_|                    _|      _|  _|    ")));
+    log::info!("{}", split_line(' ', Some("_|_|_|    _|    _|  _|  _|_|_|_|    _|      _|_|      ")));
+    log::info!("{}", split_line(' ', Some("_|        _|    _|  _|              _|      _|  _|    ")));
+    log::info!("{}", split_line(' ', Some("_|        _|    _|  _|              _|      _|    _|  ")));
     println!("\n\n\n");
-    log::info!("{:^8}", "  _|_|_|  _|        _|_|_|  ");
-    log::info!("{:^8}", "_|        _|          _|    ");
-    log::info!("{:^8}", "_|        _|          _|    ");
-    log::info!("{:^8}", "_|        _|          _|    ");
-    log::info!("{:^8}", "  _|_|_|  _|_|_|_|  _|_|_|  ");
+    log::info!("{}", split_line(' ', Some("  _|_|_|  _|        _|_|_|  ")));
+    log::info!("{}", split_line(' ', Some("_|        _|          _|    ")));
+    log::info!("{}", split_line(' ', Some("_|        _|          _|    ")));
+    log::info!("{}", split_line(' ', Some("_|        _|          _|    ")));
+    log::info!("{}", split_line(' ', Some("  _|_|_|  _|_|_|_|  _|_|_|  ")));
 }
 
-// 获取终端宽度，失败默认80列
-fn term_width() -> usize {
-    dimensions().map(|(w, _)| w).unwrap_or(80)
+// gen suit termsize split line
+// split_line('-')
+// split_line('=', "Render Complete")
+// 内部实现
+fn split_line(fill: char, title: Option<&str>) -> String {
+    let total_width = dimensions().map(|(w, _)| w).unwrap_or(80);
+    let log_width = total_width.saturating_sub(24);
+
+    let text = match title {
+        Some(t) if !t.is_empty() => t.bold().to_string(),
+        _ => String::new(),
+    };
+    let text_len = text.chars().count();
+
+    // 总空位长度
+    let pad_total = if text_len >= log_width {
+        0
+    } else {
+        log_width - text_len
+    };
+    let left_pad = pad_total / 2;
+    let right_pad = pad_total - left_pad;
+
+    let fill_str = fill.to_string();
+    let left = fill_str.repeat(left_pad);
+    let right = fill_str.repeat(right_pad);
+
+    format!("{left}{text}{right}")
 }
 
-// 生成全屏居中等号分割线（可自定义文字）
-pub fn split_line(title: &str) -> String {
-    let w = term_width();
-    let colored_text = title.green().bold().to_string();
-    format!("{:=^$}", w, colored_text)
-}
+fn split_line_println(fill: char, title: Option<&str>) -> String {
+    let total_width = dimensions().map(|(w, _)| w).unwrap_or(80);
 
-// 无文字纯分割线版本
-pub fn split_line_empty() -> String {
-    let w = term_width();
-    format!("{:=^$}", w, "")
+    let text = match title {
+        Some(t) if !t.is_empty() => t.bold().to_string(),
+        _ => String::new(),
+    };
+    let text_len = text.chars().count();
+
+    // 总空位长度
+    let pad_total = if text_len >= total_width {
+        0
+    } else {
+        total_width - text_len
+    };
+    let left_pad = pad_total / 2;
+    let right_pad = pad_total - left_pad;
+
+    let fill_str = fill.to_string();
+    let left = fill_str.repeat(left_pad);
+    let right = fill_str.repeat(right_pad);
+
+    format!("{left}{text}{right}")
 }
