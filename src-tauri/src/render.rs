@@ -44,6 +44,12 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
     time::Instant,
 };
+use term_size::dimensions;
+
+fn get_term_width() -> usize {
+    dimensions().map(|(w, _)| w).unwrap_or(80)
+}
+
 use std::{ffi::OsStr, fmt::Write as _};
 use tempfile::NamedTempFile;
 
@@ -540,19 +546,19 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
     let frame_duration = 1.0 / fps_f64;
     let audio_delay = params.config.audio_delay_frames as f64 * frame_duration;
 
-    debug!("=== Audio/Video Sync Configuration ===");
-    debug!("  Audio delay: {} frames", params.config.audio_delay_frames);
-    debug!("  Audio delay: {:.6} seconds", audio_delay);
-    debug!(
-        "  Frame duration: {:.6}s @ {}fps",
+    debug!("{:=^8}", " Audio/Video Sync Configuration s");
+    debug!("{:^8}", format_args!("Audio delay: {} frames", params.config.audio_delay_frames));
+    debug!("{:^8}", format_args!("Audio delay: {:.6} seconds", audio_delay));
+    debug!("{:^8}", format_args!(
+        "Frame duration: {:.6}s @ {}fps",
         frame_duration, params.config.fps
-    );
-    debug!(
-        "  Sample delay: {} samples @ {}Hz",
+    ));
+    debug!("{:^8}", format_args!(
+        "Sample delay: {} samples @ {}Hz",
         (audio_delay * sample_rate_f64).round() as i64,
         sample_rate
-    );
-    debug!("======================================");
+    ));
+    debug!("{:=^8}", "=");
 
     let audio_buffer_length = video_length + audio_delay.abs();
     let mut output = vec![0.0_f32; (audio_buffer_length * sample_rate_f64).ceil() as usize * 2];
@@ -1469,32 +1475,32 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
         .expect("At least one software encoder is available.");
 
 
-    debug!("=== Encoder Selection ===");
-    debug!("Video codec: {}", params.config.video_codec);
-    debug!("User preference: {}", params.config.encoder);
-    debug!("--- Encoder Availability ---");
-    debug!("h264_nvenc: {}", encoder_availability.h264_nvenc);
-    debug!("h264_qsv: {}", encoder_availability.h264_qsv);
-    debug!("h264_amf: {}", encoder_availability.h264_amf);
-    debug!("h264_vulkan: {}", encoder_availability.h264_vulkan);
-    debug!("hevc_nvenc: {}", encoder_availability.hevc_nvenc);
-    debug!("hevc_qsv: {}", encoder_availability.hevc_qsv);
-    debug!("hevc_amf: {}", encoder_availability.hevc_amf);
-    debug!("hevc_vulkan: {}", encoder_availability.hevc_vulkan);
-    debug!("av1_nvenc: {}", encoder_availability.av1_nvenc);
-    debug!("av1_qsv: {}", encoder_availability.av1_qsv);
-    debug!("av1_amf: {}", encoder_availability.av1_amf);
-    debug!("av1_vulkan: {}", encoder_availability.av1_vulkan);
-    debug!("=========================");
+    debug!("{:=^8}", " Encoder Selection ");
+    debug!("{:^8}", format_args!("Video codec: {}", params.config.video_codec));
+    debug!("{:^8}", format_args!("User preference: {}", params.config.encoder));
+    debug!("{:-^8}", " Encoder Availability ");
+    debug!("{:^8}", format_args!("h264_nvenc: {}", encoder_availability.h264_nvenc));
+    debug!("{:^8}", format_args!("h264_qsv: {}", encoder_availability.h264_qsv));
+    debug!("{:^8}", format_args!("h264_amf: {}", encoder_availability.h264_amf));
+    debug!("{:^8}", format_args!("h264_vulkan: {}", encoder_availability.h264_vulkan));
+    debug!("{:^8}", format_args!("hevc_nvenc: {}", encoder_availability.hevc_nvenc));
+    debug!("{:^8}", format_args!("hevc_qsv: {}", encoder_availability.hevc_qsv));
+    debug!("{:^8}", format_args!("hevc_amf: {}", encoder_availability.hevc_amf));
+    debug!("{:^8}", format_args!("hevc_vulkan: {}", encoder_availability.hevc_vulkan));
+    debug!("{:^8}", format_args!("av1_nvenc: {}", encoder_availability.av1_nvenc));
+    debug!("{:^8}", format_args!("av1_qsv: {}", encoder_availability.av1_qsv));
+    debug!("{:^8}", format_args!("av1_amf: {}", encoder_availability.av1_amf));
+    debug!("{:^8}", format_args!("av1_vulkan: {}", encoder_availability.av1_vulkan));
+    debug!("{:=^8}", "=");
     if !hw_errors.is_empty() {
-        error!("  --- Encoder Errors ---");
+        error!("{:-^8}", " Encoder Errors ");
         for error in &hw_errors {
             error!("    {}", error);
         }
     }
-    log::info!("=========================");
-    log::info!("  Selected encoder: {}", ffmpeg_encoder);
-    log::info!("=========================");
+    log::info!("{:=^8}", "=");
+    log::info!("{:^8}", format_args!("Selected encoder: {}", ffmpeg_encoder));
+    log::info!("{:=^8}", "=");
 
     let ffmpeg_preset = match ffmpeg_encoder {
         "h264_amf" | "hevc_amf" | "av1_amf" => "-quality",
@@ -1840,8 +1846,13 @@ pub async fn main_with_params(params: RenderParams, output_path: PathBuf) -> Res
     }
 
     debug!("IPCEvent::Done(render_start_time.elapsed().as_secs_f64())");
-
-    log::info!("渲染完成，输出文件: {:?}", output_path);
+    
+    println!(
+        "\n\n\n{} {}{:?}",
+        "[渲染完成]".green().bold(),
+        "输出文件:".cyan(),
+        output_path
+    );
     
     prpr::cleanup_billboard();
     std::process::exit(0); // 立即退出，避免其他 TLS 析构在 GL 上下文销毁后执行
@@ -1964,8 +1975,8 @@ pub fn init_colored_logger() {
                 Level::Trace => "(◎_◎).",
             };
             let level_abbr = match level {
-                Level::Error => "error!".red(),
-                Level::Warn  => "warn!".yellow(),
+                Level::Error => "ERROR!".red(),
+                Level::Warn  => "WARN!".yellow(),
                 Level::Info  => "INFO~".cyan(),
                 Level::Debug => "DEBUG:".green(),
                 Level::Trace => "TRACE-".magenta(),
@@ -1975,7 +1986,7 @@ pub fn init_colored_logger() {
                 "{}{}{}{}",
                 custom_name.bright_black(),
                 level_abbr.bold(),
-                "->".bright_magenta(),
+                " ♡ ".bright_magenta(),
                 record.args()
             )
         });
@@ -1984,16 +1995,34 @@ pub fn init_colored_logger() {
 }
 
 pub fn welcome_logger() {
-    log::info!("\n\n\n");
-    log::info!("_|_|_|    _|        _|          _|_|_|_|_|  _|    _|  ");
-    log::info!("_|    _|  _|_|_|                    _|      _|  _|    ");
-    log::info!("_|_|_|    _|    _|  _|  _|_|_|_|    _|      _|_|      ");
-    log::info!("_|        _|    _|  _|              _|      _|  _|    ");
-    log::info!("_|        _|    _|  _|              _|      _|    _|  ");
-    log::info!("\n\n\n");
-    log::info!("  _|_|_|  _|        _|_|_|  ");
-    log::info!("_|        _|          _|    ");
-    log::info!("_|        _|          _|    ");
-    log::info!("_|        _|          _|    ");
-    log::info!("  _|_|_|  _|_|_|_|  _|_|_|  ");
+    println!("\n\n\n");
+    log::info!("{:^8}", "_|_|_|    _|        _|          _|_|_|_|_|  _|    _|  ");
+    log::info!("{:^8}", "_|    _|  _|_|_|                    _|      _|  _|    ");
+    log::info!("{:^8}", "_|_|_|    _|    _|  _|  _|_|_|_|    _|      _|_|      ");
+    log::info!("{:^8}", "_|        _|    _|  _|              _|      _|  _|    ");
+    log::info!("{:^8}", "_|        _|    _|  _|              _|      _|    _|  ");
+    println!("\n\n\n");
+    log::info!("{:^8}", "  _|_|_|  _|        _|_|_|  ");
+    log::info!("{:^8}", "_|        _|          _|    ");
+    log::info!("{:^8}", "_|        _|          _|    ");
+    log::info!("{:^8}", "_|        _|          _|    ");
+    log::info!("{:^8}", "  _|_|_|  _|_|_|_|  _|_|_|  ");
+}
+
+// 获取终端宽度，失败默认80列
+fn term_width() -> usize {
+    dimensions().map(|(w, _)| w).unwrap_or(80)
+}
+
+// 生成全屏居中等号分割线（可自定义文字）
+pub fn split_line(title: &str) -> String {
+    let w = term_width();
+    let colored_text = title.green().bold().to_string();
+    format!("{:=^$}", w, colored_text)
+}
+
+// 无文字纯分割线版本
+pub fn split_line_empty() -> String {
+    let w = term_width();
+    format!("{:=^$}", w, "")
 }
