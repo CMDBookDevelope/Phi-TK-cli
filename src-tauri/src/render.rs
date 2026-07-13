@@ -1989,9 +1989,9 @@ pub fn init_colored_logger() {
             let level_abbr = match level {
                 Level::Error => "ERROR!".red(),
                 Level::Warn  => "WARN!".yellow(),
-                Level::Info  => "INFO~".cyan(),
+                Level::Info  => "INFO♪".cyan(),
                 Level::Debug => "DEBUG:".green(),
-                Level::Trace => "TRACE-".magenta(),
+                Level::Trace => "TRACE~".magenta(),
             };
             writeln!(
                 buf,
