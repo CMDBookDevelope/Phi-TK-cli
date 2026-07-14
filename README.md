@@ -123,4 +123,7 @@ Phi-TK-cli/
 
 - [Phi-TK](https://github.com/Winamin/Phi-TK "🐲")
 - [Phi-TK-render-lib](https://github.com/Winamin/Phi-TK-render-lib "龍龍龍")
+- [Phi-TK-render-lib (CNMDBook Ver.)](https://github.com/CMDBookDevelope/Phi-TK-render-lib "🥬")
+- [Macroquad CNMDBookVer.](https://github.com/CMDBookDevelope/prpr-macroquad "FULL HEADLESS SUPPORT.")
+- [Miniquad CNMDBookVer.](https://github.com/CMDBookDevelope "HEADLESS nb")
 - [Tauri](https://tauri.app/ "😱")
