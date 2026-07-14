@@ -7,6 +7,16 @@ Phi-TK CLI 是一个基于 Phi-TK Tauri部分的命令行渲染工具，不保�
 
 <img src="arts/logos.svg" width="120" height="60"></img>
 
+## 下载 / Download
+
+<div style="transform: scale(1.7);transform-origin: 0 20%;">
+
+[![Download](https://img.shields.io/badge/Download-Latest_Release-blue?style=for-the-badge)](https://github.com/CMDBookDevelope/Phi-TK-cli/releases)
+
+
+</div>
+
+
 <small>*部分代码由AI编写/修改*</small>
 
 ## Phi-TK 功能特性: 详见[原仓库](https://github.com/Winamin/Phi-TK "？！强强 ！？")
