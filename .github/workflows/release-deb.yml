@@ -1,0 +1,275 @@
+name: Release deb
+
+# Builds the Debian package for `phi-tk-cli` and (on a manual run) publishes it as
+# a GitHub release.
+#
+#   * tag   = the short commit SHA, so every release maps to one exact commit
+#   * title = the version number, read from src-tauri/tauri.conf.json
+#
+# Trigger semantics (same convention as Phi-TKC/.github/workflows/desktop.yml):
+#   * workflow_dispatch -> build + publish the release
+#   * push to main      -> build + upload the .deb as a workflow artifact only
+#
+# The .deb is assembled by hand with dpkg-deb instead of `tauri build`: this
+# repository is a pure CLI (no frontend), so there is no `dist/` for the Tauri
+# bundler to package, and the payload is exactly three things — the binary, a
+# wrapper in /usr/bin and the renderer assets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (leave empty to use src-tauri/tauri.conf.json)"
+        required: false
+        type: string
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+# A newer build supersedes the previous one. The event name is part of the group
+# so a push-triggered build can never cancel an in-flight release publish.
+concurrency:
+  group: release-deb-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  APP_NAME: phi-tk-cli
+  # prpr-avc's build.rs appends /<target-triple> to this path.
+  PRPR_AVC_LIBS: ${{ github.workspace }}/prpr-lib/prpr-avc/static-lib
+
+jobs:
+  build-deb:
+    name: Build .deb
+    # 22.04 keeps the package's glibc requirement low enough for older distros.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            pkg-config \
+            file \
+            libasound2-dev \
+            libssl-dev \
+            zlib1g-dev \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libglib2.0-dev
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      # The static FFmpeg archives are tracked in the render-lib branch, but
+      # fetching just the x86_64 set is much cheaper than pulling every triple.
+      - name: Fetch prpr-avc static FFmpeg libs
+        run: |
+          git clone --depth 1 --filter=blob:none --sparse \
+            --branch render-lib \
+            https://github.com/CMDBookDevelope/Phi-TK-render-lib.git prpr-lib
+          git -C prpr-lib sparse-checkout set "prpr-avc/static-lib/x86_64-unknown-linux-gnu"
+
+      - name: Resolve version
+        id: version
+        run: |
+          set -euo pipefail
+          version="${{ inputs.version }}"
+          if [ -z "$version" ]; then
+            version="$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')"
+          fi
+          # Debian versions must start with a digit; keep it to a sane alphabet.
+          if ! printf '%s' "$version" | grep -Eq '^[0-9][0-9A-Za-z.+~-]*$'; then
+            echo "::error::invalid version '$version' (Debian versions must start with a digit)"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Building $APP_NAME $version"
+
+      - name: Build phi-tk-cli
+        run: |
+          set -euo pipefail
+          # tauri-build reads `bundle.build.frontendDist` even though this crate has
+          # no frontend; an empty directory keeps the build script from complaining.
+          mkdir -p dist
+          cargo build --locked --release --bin phi-tk-cli --manifest-path src-tauri/Cargo.toml
+
+      - name: Package .deb
+        id: package
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+          arch="$(dpkg --print-architecture)"
+          binary="src-tauri/target/release/$APP_NAME"
+          pkgroot="build/deb-root"
+          outdir="dist-deb"
+          debfile="$outdir/${APP_NAME}_${version}_${arch}.deb"
+
+          # --- payload -------------------------------------------------------
+          rm -rf "$pkgroot"
+          mkdir -p "$pkgroot/DEBIAN" \
+                   "$pkgroot/usr/bin" \
+                   "$pkgroot/usr/lib/$APP_NAME" \
+                   "$pkgroot/usr/lib/ptkc-assets"
+
+          install -m 0755 "$binary" "$pkgroot/usr/lib/$APP_NAME/$APP_NAME"
+          cp -a src-tauri/assets/. "$pkgroot/usr/lib/ptkc-assets/"
+
+          # The repo is checked out world-writable (0777), which would leak into
+          # the package. Normalise it: dirs 0755, data 0644, executables 0755.
+          find "$pkgroot/usr" -type d -exec chmod 0755 {} +
+          find "$pkgroot/usr/lib/ptkc-assets" -type f -exec chmod 0644 {} +
+          chmod 0755 "$pkgroot/usr/lib/$APP_NAME/$APP_NAME"
+
+          # Keep the binary under /usr/lib and expose a tiny wrapper, exactly like
+          # the hand-built packages this workflow replaces. EGL_PLATFORM=surfaceless
+          # is a harmless leftover hint for the headless EGL path.
+          cat > "$pkgroot/usr/bin/$APP_NAME" <<'WRAPPER'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          export EGL_PLATFORM=surfaceless
+          exec "/usr/lib/phi-tk-cli/phi-tk-cli" "$@"
+          WRAPPER
+          chmod 0755 "$pkgroot/usr/bin/$APP_NAME"
+
+          cat > "$pkgroot/DEBIAN/postinst" <<'POSTINST'
+          #!/bin/bash
+          set -e
+          chmod 0755 /usr/bin/phi-tk-cli /usr/lib/phi-tk-cli/phi-tk-cli || true
+          exit 0
+          POSTINST
+          chmod 0755 "$pkgroot/DEBIAN/postinst"
+
+          # --- metadata ------------------------------------------------------
+          installed_kb="$(du -sk "$pkgroot/usr" | cut -f1)"
+          cat > "$pkgroot/DEBIAN/control" <<CONTROL
+          Package: $APP_NAME
+          Version: $version
+          Section: utils
+          Priority: optional
+          Architecture: $arch
+          Maintainer: Link/Mivik/CNMDBook
+          Installed-Size: $installed_kb
+          Depends: ffmpeg, libasound2, libvulkan1, libgl1, libx11-6, libxi6, libxcursor1, zlib1g
+          Recommends: pulseaudio | pipewire-pulse
+          Homepage: https://github.com/CMDBookDevelope/Phi-TK-cli
+          Description: Phi-TK command line renderer with fully headless support.
+           Renders Phigros chart archives (.pez / .zip) to video without an
+           X11/Wayland display, using the Vulkan backend with an ffmpeg fallback.
+          CONTROL
+
+          # --- build + sanity checks -----------------------------------------
+          mkdir -p "$outdir"
+          dpkg-deb --build --root-owner-group "$pkgroot" "$debfile"
+          (cd "$outdir" && sha256sum "$(basename "$debfile")" > "$(basename "$debfile").sha256")
+
+          echo "--- control ---"
+          dpkg-deb --field "$debfile"
+          echo "--- contents ---"
+          dpkg-deb --contents "$debfile"
+          echo "--- runnable? ---"
+          # `--help` is parsed before any window/GPU context is created, so this
+          # works on a GPU-less runner. Redirect to a file: piping into `head`
+          # would SIGPIPE the renderer and trip `set -o pipefail`.
+          "$pkgroot/usr/lib/$APP_NAME/$APP_NAME" --help > help.txt
+          head -5 help.txt
+
+          echo "debfile=$debfile" >> "$GITHUB_OUTPUT"
+          echo "checksum=$debfile.sha256" >> "$GITHUB_OUTPUT"
+          echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-deb-${{ github.sha }}
+          path: dist-deb/*
+          if-no-files-found: error
+
+      - name: Publish release
+        # Pushes only build; publishing is an explicit "Run workflow".
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          # Tag = short commit SHA: one immutable tag per built commit.
+          tag_name: ${{ steps.package.outputs.sha }}
+          # Title = the version number from src-tauri/tauri.conf.json.
+          name: v${{ steps.version.outputs.version }}
+          body: |
+            **Phi-TK CLI v${{ steps.version.outputs.version }}** — a headless Phigros chart renderer.
+
+            Built from commit [`${{ steps.package.outputs.sha }}`](https://github.com/${{ github.repository }}/commit/${{ github.sha }}).
+
+            ## Install
+
+            ```bash
+            sudo apt install ./${{ env.APP_NAME }}_${{ steps.version.outputs.version }}_amd64.deb
+            # or, if you prefer dpkg:
+            sudo dpkg -i ./${{ env.APP_NAME }}_${{ steps.version.outputs.version }}_amd64.deb
+            ```
+
+            `ffmpeg` has to be on your `PATH`; the package pulls in the remaining
+            runtime libraries. The binary itself lives in `/usr/lib/phi-tk-cli/` behind
+            a small `/usr/bin/phi-tk-cli` wrapper, and the renderer assets are installed
+            to `/usr/lib/ptkc-assets/`.
+
+            ## Render something
+
+            ```bash
+            # 1080p, 60 fps, CRF 20, with the result screen
+            phi-tk-cli -i chart.pez -o out.mp4 -r 1920x1080 -f 60 -c 20 -R
+
+            # a little flair: player name, custom combo text, hidden PB
+            phi-tk-cli -i chart.pez -o out.mp4 --name "Phi TK" --combo "PHI-TK POWERED" --hide-ui pb
+            ```
+
+            ## Highlights
+
+            - **No display server required.** Rendering runs on a headless Vulkan
+              context, so the CLI works over SSH, inside containers, and in CI — no
+              X11, no Wayland, no `xvfb-run`.
+            - **Vulkan first, ffmpeg fallback.** Frames are read back as NV12 and handed
+              to the Vulkan Video encoder when the GPU supports it; otherwise encoding
+              falls back to ffmpeg using the bundled H.264 configuration.
+            - **Everything is a flag.** Speed, note scale, volumes, UI elements
+              (`--ui` / `--hide-ui`), background dimming (`--dim`), the result screen
+              (`--result`, `--ending`), codec / encoder / preset / bitrate and audio
+              format are all controllable from the command line.
+            - **One process, one render.** There is no built-in queue: start N processes
+              for N charts and let your shell or scheduler handle the parallelism.
+
+            > Heads up: `--dark` and `--finish` were renamed to `--dim` and `--result`
+            > in this series. The old spellings are rejected by clap — update your
+            > scripts accordingly.
+
+            ## Verify the download
+
+            ```bash
+            sha256sum -c ${{ env.APP_NAME }}_${{ steps.version.outputs.version }}_amd64.deb.sha256
+            ```
+
+            The package is unsigned; `apt` will warn about that on first install, which
+            is expected for a build published straight from CI.
+
+            Full changelog: https://github.com/CMDBookDevelope/Phi-TK-cli/commits/main
+          files: |
+            ${{ steps.package.outputs.debfile }}
+            ${{ steps.package.outputs.checksum }}
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: false
