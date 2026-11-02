@@ -84,17 +84,78 @@ phi-tk-cli # or wrapper.sh \
 ```
 --->
 ### 自定义参数
+
+`-r/--resolution`、`-R/--result` 这类简写遵循「更常用的参数用小写、同类里次常用的用大写」：
+小写留给高频选项，大写留给同一字母的次要含义。
+
 | 参数 | 说明 | 可用值 | 默认值 |
 |------|--------|------|-----------|
-| `-i, --input` | 谱面文件路径 | FilePath | 自己填。。。我怎么知道你要渲染什么，，， |
+| `-i, --input` | 谱面文件路径 | FilePath | 必填 |
 | `-o, --output` | 输出视频路径 | FilePath | output.mp4 |
-| `-r, --resolution` | 分辨率 | 整数x整数 | 1920x1440 |
-| `-c, --crf` | 渲染质量 | 整数 | 20 |
-| `--fps` | 帧率 | 整数 | 30 |
-| `-d, --dark` | 背景亮度 | 0-100 | 30 |
-| `-l, --load` | 显示加载界面 | 布尔 | False |
-| `--finish` | 显示结算界面 | 布尔 | False |
-| `-a, --assets` | 资源文件位置 | DirectoryPath | /usr/lib/ptkc-assets |
+| `-r, --resolution` | 分辨率 | 宽x高 | 1920x1440 |
+| `-c, --crf` | 渲染质量（CRF/QP） | 1-51 | 20 |
+| `-f, --fps` | 帧率 | 整数 | 30 |
+| `-d, --dim` | 背景压暗百分比 | 0-100 | 30 |
+| `-R, --result` | 显示结算界面（原 `--finish`） | 布尔 | false |
+| `-l, --load` | 显示加载界面 | 布尔 | false |
+| `--ending` | 结算画面时长（秒） | 浮点 | 有 `--result` 时 3 |
+| `-n, --name` | 玩家名 | 文本 | 空 |
+| `--rks` | 玩家 rks | 浮点 | 6.16 |
+| `--avatar` | 玩家头像路径 | FilePath | 无 |
+| `--combo` | Combo 文本 | 文本 | PHI-TK POWERED |
+| `-w, --watermark` | 水印文本 | 文本 | 空 |
+| `--ui` | 显示的 UI 元素（逗号分隔；未列出的隐藏） | score,combo,name,level,line,pb,pause / all / none | 全部 |
+| `--hide-ui` | 隐藏的 UI 元素（在 `--ui` 之后应用） | 同上 | 无 |
+| `--bar` | 显示进度条 | 布尔 | false |
+| `--score-aim` | 显示目标分数 | 布尔 | false |
+| `--chart-debug` | 显示谱面调试信息 | 布尔 | false |
+| `--flid-x` | 水平镜像谱面 | 布尔 | false |
+| `--chart-ratio` | 谱面拉伸比例 | 浮点 | 1.0 |
+| `--background` | 显示谱面插画背景 | 布尔 | false |
+| `--respack` | 资源包路径 | DirectoryPath | 无 |
+| `-s, --speed` | 谱面流速倍率 | 浮点 | 1.0 |
+| `--note-scale` | 音符缩放 | 浮点 | 1.0 |
+| `--volume-music` | 音乐音量 | 0-1 | 1.0 |
+| `--volume-sfx` | 音效音量 | 0-1 | 1.0 |
+| `--fxaa` | 开启 FXAA | 布尔 | false |
+| `--no-particle` | 关闭粒子效果 | 布尔 | false |
+| `--no-effect` | 关闭背景特效 | 布尔 | false |
+| `--no-double-hint` | 关闭双押提示线 | 布尔 | false |
+| `--aggressive` | Aggressive 模式 | 布尔 | false |
+| `--hand-split` | 手序拆分 | 布尔 | false |
+| `--sample-count` | MSAA 采样数 | 1 / 2 / 4 / 8 … | 4 |
+| `--codec` | 视频编码 | h264 / hevc / av1 | h264 |
+| `-e, --encoder` | 编码器 | auto / nvenc / qsv / amf / vulkan / dx12 / cpu | auto |
+| `-p, --preset` | FFmpeg 预设 | veryfast…veryslow | medium |
+| `--format` | 封装格式 | mp4 / mov | mp4 |
+| `--bitrate-control` | 码率控制 | CRF / CBR | CRF |
+| `-b, --bitrate` | 显式码率（覆盖 `--crf`） | 如 8000k | 无 |
+| `--no-hw-accel` | 关闭硬件加速 | 布尔 | false |
+| `--ffmpeg-thread` | FFmpeg 多线程 | 布尔 | false |
+| `--target-audio` | 音频采样率 | 整数 | 48000 |
+| `--audio-format` | 音频格式 | flac / aac / opus … | flac |
+| `--audio-bit` | 音频位深 | 16 / 24 / 32 | 无 |
+| `--audio-delay-frames` | 音频延迟（帧） | 整数 | 0 |
+| `--assets` | 资源文件位置 | DirectoryPath | 自动探测（旧版安装位置为 /usr/lib/ptkc-assets） |
+
+### 常用示例
+
+```bash
+# 1080p60，显示结算界面
+phi-tk-cli -i song.pez -o song.mp4 -r 1920x1080 -f 60 -R
+
+# 只保留分数和连击，隐藏其余 UI，压暗 50%
+phi-tk-cli -i song.pez --dim 50 --ui score,combo
+
+# 指定玩家信息与手序拆分，走 NVENC
+phi-tk-cli -i song.pez -n "Winamin" --rks 16.2 --hand-split -e nvenc -p slow
+
+# 无硬件加速，CBR 8Mbps
+phi-tk-cli -i song.pez --no-hw-accel --bitrate-control CBR -b 8000k
+
+# 不显示加载动画、显示结算 5 秒
+phi-tk-cli -i song.pez --result --ending 5
+```
 
 ~~*摆烂了。。。申请查看[源代码](src-tauri/src/render.rs#L1939-L1975 "1939工作室快让美芬死一死。")*~~
 
