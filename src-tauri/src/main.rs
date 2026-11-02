@@ -1,6 +1,7 @@
-mod render;
-use clap::Parser;
-use render::{render_cli, CliArgs};
+// Prevents additional console window on Windows in release, DO NOT REMOVE!!
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+use phi_tk_mini_lib::{render_cli, CliArgs};
 use macroquad::window::Conf;
 
 // 定义返回 Conf 的函数，设置 headless 为 true

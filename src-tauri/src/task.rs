@@ -1,9 +1,9 @@
 use crate::{
     common::output_dir,
-    render::{IPCEvent, RenderParams},
     ASSET_PATH,
 };
 use anyhow::Result;
+use phi_tk_mini_lib::render::{IPCEvent, RenderParams};
 use chrono::Local;
 use prpr::fs;
 use serde::Serialize;

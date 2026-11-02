@@ -6,7 +6,6 @@ prpr::tl_file!("main" mtl);
 mod common;
 mod ipc;
 mod preview;
-mod render;
 mod task;
 
 use anyhow::{bail, Context, Result};
@@ -17,7 +16,7 @@ use prpr::{
     fs::{self, FileSystem},
     info::ChartInfo,
 };
-use render::{find_ffmpeg, RenderConfig, RenderParams};
+use phi_tk_mini_lib::render::{find_ffmpeg, RenderConfig, RenderParams};
 use serde::Serialize;
 use std::{
     collections::HashMap,
@@ -69,7 +68,7 @@ pub async fn run() -> Result<()> {
     if std::env::args().len() > 1 {
         match std::env::args().skip(1).next().as_deref() {
             Some("render") => {
-                run_wrapped(render::main()).await;
+                run_wrapped(phi_tk_mini_lib::render::main()).await;
             }
             Some("preview") => {
                 run_wrapped(preview::main()).await;

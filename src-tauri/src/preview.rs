@@ -1,4 +1,4 @@
-use crate::render::{build_player, RenderParams};
+use phi_tk_mini_lib::render::{build_player, RenderParams};
 use anyhow::Result;
 use macroquad::prelude::*;
 use prpr::{
