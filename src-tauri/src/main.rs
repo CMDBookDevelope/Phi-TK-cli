@@ -20,16 +20,22 @@ fn window_conf() -> Conf {
     }
 }
 
-// 使用 window_conf 函数返回 Conf，设置 headless: true
-#[macroquad::main(window_conf)]
-async fn main() {
+fn main() {
+    // Parse before creating the window so `--help` / `--version` work over SSH and
+    // on machines without a display.
     let args = CliArgs::parse();
-    macroquad::file::set_pc_assets_folder(&args.assets);
 
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    rt.block_on(async {
-        if let Err(e) = render_cli(args).await {
-            eprintln!("(｀皿´＃). Error: {:?}", e);
-        }
+    macroquad::Window::from_config(window_conf(), async move {
+        macroquad::file::set_pc_assets_folder(&args.assets);
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            if let Err(e) = render_cli(args).await {
+                eprintln!("(｀皿´＃). Error: {:?}", e);
+                std::process::exit(1);
+            }
+            // Headless CLI: nothing will pump the window after the render ends.
+            std::process::exit(0);
+        });
     });
 }
