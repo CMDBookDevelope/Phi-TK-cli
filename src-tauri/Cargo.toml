@@ -16,7 +16,6 @@ name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
-io = "0.0.2"
 futures = "0.3"
 log = "0.4"
 indicatif = "0.17"
