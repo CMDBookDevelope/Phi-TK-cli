@@ -35,7 +35,6 @@ macroquad = { git = "https://github.com/CMDBookDevelope/prpr-macroquad", default
 prpr = { git = "https://github.com/CMDBookDevelope/Phi-TK-render-lib", package = "prpr", branch = "render-lib" }
 phi-tk-mini-lib = { path = "mini-lib" }
 
-sasa = { git = "https://github.com/Winamin/sasa" }
 #sasa = {path = "/home/link/sasa"}
 serde_yaml = "0.9"
 tokio = { version = "1.36.0", features = ["process", "rt-multi-thread", "fs", "full"] }
@@ -68,6 +67,14 @@ opt-level = 3
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55.0"
+
+# See Phi-TKC: on Android sasa must use oboe, otherwise cpal's oboe 0.4 and
+# sasa's oboe 0.5 produce duplicate C++ symbols at link time.
+[target.'cfg(target_os = "android")'.dependencies]
+sasa = { git = "https://github.com/Winamin/sasa", default-features = false, features = ["oboe"] }
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+sasa = { git = "https://github.com/Winamin/sasa" }
 
 [dev-dependencies]
 env_logger = "0.10"
