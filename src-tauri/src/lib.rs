@@ -5,7 +5,6 @@ prpr::tl_file!("main" mtl);
 
 mod common;
 mod ipc;
-mod preview;
 mod task;
 
 use anyhow::{bail, Context, Result};
@@ -70,9 +69,6 @@ pub async fn run() -> Result<()> {
             Some("render") => {
                 run_wrapped(phi_tk_mini_lib::render::main()).await;
             }
-            Some("preview") => {
-                run_wrapped(preview::main()).await;
-            }
             cmd => {
                 eprintln!("Unknown subcommand: {cmd:?}");
                 std::process::exit(1);
@@ -92,7 +88,6 @@ pub async fn run() -> Result<()> {
             exit_program,
             show_folder,
             show_in_folder,
-            preview_chart,
             parse_chart,
             batch_add_tasks,
             post_render,
@@ -256,26 +251,6 @@ async fn parse_chart(path: &Path) -> Result<ChartInfo, InvokeError> {
     .await
 }
 
-#[tauri::command]
-async fn preview_chart(params: RenderParams) -> Result<(), InvokeError> {
-    wrap_async(async move {
-        let mut child = Command::new(std::env::current_exe()?)
-            .arg("preview")
-            .arg(ASSET_PATH.get().unwrap())
-            .stdin(Stdio::piped())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .spawn()?;
-
-        let mut stdin = child.stdin.take().unwrap();
-        stdin
-            .write_all(format!("{}\n", serde_json::to_string(&params)?).as_bytes())
-            .await?;
-
-        Ok(())
-    })
-    .await
-}
 #[tauri::command]
 async fn post_render(
     queue: State<'_, TaskQueue>,

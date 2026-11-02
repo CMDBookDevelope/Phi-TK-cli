@@ -9,9 +9,9 @@ use macroquad::window::Conf;
 fn window_conf() -> Conf {
     Conf {
         window_title: "Phi-TK CLI看到我说明失败了。。。".to_string(),
-        // Vulkan 渲染需要真实的 Vulkan 上下文，miniquad 的 headless 路径只有
-        // EGL/OpenGL。服务器上可用 `xvfb-run` 提供虚拟显示。
-        headless: false,
+        // 真正的无头：Vulkan 后端会走 `VulkanContext::new_headless`，
+        // 不创建窗口、不需要 X11/Wayland。
+        headless: true,
         platform: macroquad::miniquad::conf::Platform {
             rendering_backend: macroquad::miniquad::conf::RenderingBackend::Vulkan,
             ..Default::default()
