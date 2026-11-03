@@ -29,10 +29,10 @@ tauri = { version = "2", features = [ "protocol-asset", "tray-icon"] }
 
 anyhow = { version = "1.0.70", features = ["backtrace"] }
 
-#prpr = { git = "https://github.com/CMDBookDevelope/Phi-TK-render-lib", package = "prpr", branch = "render-lib" }
+#prpr = { git = "https://github.com/CMDBookDevelope/Phi-TKC-render-lib", package = "prpr", branch = "render-lib" }
 #macroquad = { git = "https://github.com/CMDBookDevelope/prpr-macroquad", default-features = false }
 macroquad = { git = "https://github.com/CMDBookDevelope/prpr-macroquad", default-features = false }
-prpr = { git = "https://github.com/CMDBookDevelope/Phi-TK-render-lib", package = "prpr", branch = "render-lib" }
+prpr = { git = "https://github.com/CMDBookDevelope/Phi-TKC-render-lib", package = "prpr", branch = "render-lib" }
 phi-tk-mini-lib = { path = "mini-lib" }
 
 #sasa = {path = "/home/link/sasa"}
