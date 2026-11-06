@@ -2549,9 +2549,11 @@ async fn render_impl(
     // `log_mode == false` and reports progress through IPC instead, so it gets
     // a hidden bar.
     let progress = if log_mode {
+        // One repaint per second: a 20 Hz bar is wasted work and scrolls the
+        // terminal when stderr is not a TTY.
         let pb = ProgressBar::with_draw_target(
             Some(out_frames),
-            ProgressDrawTarget::stderr(),
+            ProgressDrawTarget::stderr_with_hz(1),
         );
         pb.set_style(
             ProgressStyle::default_bar()
