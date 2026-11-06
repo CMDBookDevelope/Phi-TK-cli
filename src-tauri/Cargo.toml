@@ -1,6 +1,6 @@
 [package]
 name = "phi-tk-cli"
-version = "1.1.4-fix"
+version = "1.1.5-noise"
 edition = "2024"
 
 [[bin]]
@@ -78,3 +78,8 @@ sasa = { git = "https://github.com/Winamin/sasa" }
 
 [dev-dependencies]
 env_logger = "0.10"
+
+# Local-only while the 噪域 (block area) port is under test; mirrors the patch
+# in Phi-TKC/src-tauri/Cargo.toml.
+[patch."https://github.com/CMDBookDevelope/Phi-TKC-render-lib"]
+prpr = { path = "../../Phi-TKC-render-lib/prpr" }

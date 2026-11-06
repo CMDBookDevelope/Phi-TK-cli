@@ -178,6 +178,12 @@ Phi-TK-cli/
 └── arts/                  # 文档图片
 ```
 
+## 致谢 / Acknowledgements
+
+- **噪域（`blockAreaList`）支持**来自 [Ameiro-sudo/Phi-TK](https://github.com/Ameiro-sudo/Phi-TK)（`noise-build` 分支），
+  经 [Phi-TKC](https://github.com/CMDBookDevelope/Phi-TKC) 移植为后端无关（Vulkan 兼容）的实现。
+  感谢该 fork 的修改者对 Phigros 9th-chapter 噪域所做的逆向与实现工作。
+
 ## 许可证
 
 本项目采用 GNU v3.0 开源许可证，详见 LICENSE 文件。
