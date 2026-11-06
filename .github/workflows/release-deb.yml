@@ -177,7 +177,6 @@ jobs:
           # --- build + sanity checks -----------------------------------------
           mkdir -p "$outdir"
           dpkg-deb --build --root-owner-group "$pkgroot" "$debfile"
-          (cd "$outdir" && sha256sum "$(basename "$debfile")" > "$(basename "$debfile").sha256")
 
           echo "--- control ---"
           dpkg-deb --field "$debfile"
@@ -191,7 +190,6 @@ jobs:
           head -5 help.txt
 
           echo "debfile=$debfile" >> "$GITHUB_OUTPUT"
-          echo "checksum=$debfile.sha256" >> "$GITHUB_OUTPUT"
           echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Upload artifact
@@ -259,9 +257,8 @@ jobs:
 
             ## Verify the download
 
-            ```bash
-            sha256sum -c ${{ env.APP_NAME }}_${{ steps.version.outputs.version }}_amd64.deb.sha256
-            ```
+            GitHub shows the SHA-256 digest of every release asset on the release page,
+            so no separate `.sha256` file is published anymore.
 
             The package is unsigned; `apt` will warn about that on first install, which
             is expected for a build published straight from CI.
@@ -269,7 +266,6 @@ jobs:
             Full changelog: https://github.com/CMDBookDevelope/Phi-TK-cli/commits/main
           files: |
             ${{ steps.package.outputs.debfile }}
-            ${{ steps.package.outputs.checksum }}
           fail_on_unmatched_files: true
           draft: false
           prerelease: false
