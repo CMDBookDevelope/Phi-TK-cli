@@ -4724,7 +4724,7 @@ dependencies = [
 
 [[package]]
 name = "phi-tk-cli"
-version = "1.1.5-noise"
+version = "1.1.5-beta-noise"
 dependencies = [
  "anyhow",
  "atty",
@@ -4997,6 +4997,7 @@ checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 [[package]]
 name = "prpr"
 version = "0.4.0"
+source = "git+https://github.com/CMDBookDevelope/Phi-TKC-render-lib?branch=render-lib#7c8782fd6ddf842b91b2bd5f3252f9689cde860e"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -5077,6 +5078,7 @@ dependencies = [
 [[package]]
 name = "prpr-avc"
 version = "0.1.0"
+source = "git+https://github.com/CMDBookDevelope/Phi-TKC-render-lib?branch=render-lib#7c8782fd6ddf842b91b2bd5f3252f9689cde860e"
 dependencies = [
  "anyhow",
  "tracing",
