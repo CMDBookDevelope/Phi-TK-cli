@@ -180,9 +180,10 @@ Phi-TK-cli/
 
 ## 致谢 / Acknowledgements
 
-- **噪域（`blockAreaList`）支持**来自 [Ameiro-sudo/Phi-TK](https://github.com/Ameiro-sudo/Phi-TK)（`noise-build` 分支），
-  经 [Phi-TKC](https://github.com/CMDBookDevelope/Phi-TKC) 移植为后端无关（Vulkan 兼容）的实现。
-  感谢该 fork 的修改者对 Phigros 9th-chapter 噪域所做的逆向与实现工作。
+- **噪域（`blockAreaList`）数据模型**来自 [Ameiro-sudo/Phi-TK](https://github.com/Ameiro-sudo/Phi-TK)（`noise-build` 分支），
+  渲染参考 [ziheng18/block-area-edit](https://github.com/ziheng18/block-area-edit)（GPL-3.0-only）的「实机贴合」模型，
+  经 [Phi-TKC](https://github.com/CMDBookDevelope/Phi-TKC) 适配为后端无关（Vulkan 兼容）的 Rust 实现。
+  感谢两个项目的作者对 Phigros 9th-chapter 噪域所做的逆向与实现工作。
 
 ## 许可证
 

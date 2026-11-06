@@ -43,7 +43,7 @@
   },
   "productName": "Phi-TK",
   "mainBinaryName": "Phi-TK",
-  "version": "1.1.5-beta-noise",
+  "version": "1.1.6",
   "identifier": "com.sc.phi.tk",
   "plugins": {},
   "app": {
