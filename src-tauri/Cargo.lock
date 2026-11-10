@@ -3449,7 +3449,7 @@ dependencies = [
 [[package]]
 name = "macroquad"
 version = "0.3.25"
-source = "git+https://github.com/CMDBookDevelope/prpr-macroquad#7576b11c58bfafaab7ef539c0a2d43ce492d7ff0"
+source = "git+https://github.com/CMDBookDevelope/prpr-macroquad#7dfe4b0c2daf3d5c3e00620fed95e536077e4e81"
 dependencies = [
  "bumpalo",
  "fontdue",
@@ -3463,7 +3463,7 @@ dependencies = [
 [[package]]
 name = "macroquad_macro"
 version = "0.1.7"
-source = "git+https://github.com/CMDBookDevelope/prpr-macroquad#7576b11c58bfafaab7ef539c0a2d43ce492d7ff0"
+source = "git+https://github.com/CMDBookDevelope/prpr-macroquad#7dfe4b0c2daf3d5c3e00620fed95e536077e4e81"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3563,13 +3563,14 @@ checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 [[package]]
 name = "miniquad"
 version = "0.3.15"
-source = "git+https://github.com/CMDBookDevelope/prpr-miniquad#d3e6f70533fe87f0d991002da29ecb5e3b3acf3e"
+source = "git+https://github.com/CMDBookDevelope/prpr-miniquad#4b84649a147333abc00f67d804b82468ebfa67e3"
 dependencies = [
  "ash 0.37.3+1.3.251",
  "ash-window",
  "gpu-allocator 0.26.0",
  "keyboard-types 0.8.3",
  "libc",
+ "metal",
  "napi-build-ohos",
  "napi-derive-ohos",
  "napi-ohos",
@@ -3587,6 +3588,7 @@ dependencies = [
  "raw-window-handle 0.6.2",
  "rayon",
  "shaderc",
+ "spirv-cross2",
  "winapi",
  "xcomponent-sys",
 ]
@@ -3955,6 +3957,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-derive"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed3955f1a9c7c0c15e092f9c887db08b1fc683305fdf6eb6684f22555355e202"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.118",
+]
+
+[[package]]
 name = "num-integer"
 version = "0.1.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4283,7 +4296,7 @@ dependencies = [
  "jni 0.19.0",
  "ndk 0.6.0",
  "ndk-context",
- "num-derive",
+ "num-derive 0.3.3",
  "num-traits",
  "oboe-sys 0.4.5",
 ]
@@ -4294,7 +4307,7 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8868cc237ee02e2d9618539a23a8d228b9bb3fc2e7a5b11eed3831de77c395d0"
 dependencies = [
- "num-derive",
+ "num-derive 0.3.3",
  "num-traits",
  "oboe-sys 0.5.0",
 ]
@@ -4724,7 +4737,7 @@ dependencies = [
 
 [[package]]
 name = "phi-tk-cli"
-version = "1.1.9"
+version = "1.1.10"
 dependencies = [
  "anyhow",
  "atty",
@@ -4997,7 +5010,7 @@ checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 [[package]]
 name = "prpr"
 version = "0.4.0"
-source = "git+https://github.com/CMDBookDevelope/Phi-TKC-render-lib?branch=render-lib#ce933904ba4e670f4b8b8cd7ddc5290cc63ad54e"
+source = "git+https://github.com/CMDBookDevelope/Phi-TKC-render-lib?branch=render-lib#04135707a941ebe8b9a2dbea86c31f98ac63018f"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -5078,7 +5091,7 @@ dependencies = [
 [[package]]
 name = "prpr-avc"
 version = "0.1.0"
-source = "git+https://github.com/CMDBookDevelope/Phi-TKC-render-lib?branch=render-lib#ce933904ba4e670f4b8b8cd7ddc5290cc63ad54e"
+source = "git+https://github.com/CMDBookDevelope/Phi-TKC-render-lib?branch=render-lib#04135707a941ebe8b9a2dbea86c31f98ac63018f"
 dependencies = [
  "anyhow",
  "tracing",
@@ -6289,6 +6302,44 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eda41003dc44290527a59b13432d4a0379379fa074b70174882adfbdfd917844"
 dependencies = [
  "bitflags 2.13.0",
+]
+
+[[package]]
+name = "spirv-cross-sys"
+version = "0.4.3+e670b39"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85a1966fed47a227b129a34440657270dd1b47c7771f2b2637b82ff6dfcbde0b"
+dependencies = [
+ "bytemuck",
+ "cc",
+ "num-derive 0.4.2",
+ "num-traits",
+]
+
+[[package]]
+name = "spirv-cross2"
+version = "0.4.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c248b63ebea5a3153214091875d63cc0bacbe4743c13e20dc54bd73ba847972"
+dependencies = [
+ "bitflags 2.13.0",
+ "bytemuck",
+ "memchr",
+ "spirv",
+ "spirv-cross-sys",
+ "spirv-cross2-derive",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "spirv-cross2-derive"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18017a288e6ce64dd5d56510166baeabb01849483555c031f573c091b6934a64"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.118",
 ]
 
 [[package]]
