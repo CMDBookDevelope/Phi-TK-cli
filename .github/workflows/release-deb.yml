@@ -192,11 +192,23 @@ jobs:
           echo "debfile=$debfile" >> "$GITHUB_OUTPUT"
           echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
+      - name: Package Linux portable archive
+        run: |
+          set -euo pipefail
+          python3 scripts/package-portable.py --app "$APP_NAME" \
+            --version "${{ steps.version.outputs.version }}" --target linux_x86_64 \
+            --binary "src-tauri/target/release/$APP_NAME" --assets src-tauri/assets \
+            --output dist-portable
+          tar -tzf dist-portable/*.tar.gz > portable-files.txt
+          grep -q '/assets/ending.mp3$' portable-files.txt
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.APP_NAME }}-deb-${{ github.sha }}
-          path: dist-deb/*
+          path: |
+            dist-deb/*
+            dist-portable/*.tar.gz
           if-no-files-found: error
 
       - name: Publish release
@@ -225,6 +237,10 @@ jobs:
             runtime libraries. The binary itself lives in `/usr/lib/phi-tk-cli/` behind
             a small `/usr/bin/phi-tk-cli` wrapper, and the renderer assets are installed
             to `/usr/lib/ptkc-assets/`.
+
+            A portable Linux `.tar.gz` is also included. Extract it and run
+            `./launch.sh` inside the extracted directory; it includes renderer assets
+            and needs the same system libraries and `ffmpeg` as the Debian package.
 
             ## Render something
 
@@ -266,6 +282,7 @@ jobs:
             Full changelog: https://github.com/CMDBookDevelope/Phi-TK-cli/commits/main
           files: |
             ${{ steps.package.outputs.debfile }}
+            dist-portable/*.tar.gz
           fail_on_unmatched_files: true
           draft: false
           prerelease: false
