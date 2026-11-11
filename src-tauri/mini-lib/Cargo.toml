@@ -1,6 +1,6 @@
 [package]
 name = "phi-tk-mini-lib"
-version = "1.2.0"
+version = "1.2.1"
 edition = "2021"
 description = "Minimal render-only library for Phi-TK CLI, stripped of AI/preview/task management"
 

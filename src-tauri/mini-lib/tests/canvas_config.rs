@@ -23,5 +23,8 @@ fn obsolete_aspect_settings_are_ignored_and_not_saved() {
 fn cli_version_matches_the_application_release() {
     let error = CliArgs::try_parse_from(["phi-tk-cli", "--version"]).unwrap_err();
     assert_eq!(error.kind(), clap::error::ErrorKind::DisplayVersion);
-    assert_eq!(error.to_string().trim(), "phi-tk-cli 1.2.0");
+    assert_eq!(
+        error.to_string().trim(),
+        format!("phi-tk-cli {}", env!("CARGO_PKG_VERSION"))
+    );
 }
