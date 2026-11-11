@@ -1,4 +1,5 @@
 mod av1_level;
+mod frame_handoff;
 mod gpu_info;
 pub mod ipc;
 pub mod render;

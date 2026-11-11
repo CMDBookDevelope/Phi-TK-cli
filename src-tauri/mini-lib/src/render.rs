@@ -736,12 +736,53 @@ struct VulkanPipe {
 }
 
 struct Nv12Pipe {
+    // Drop joins the reader before readback storage (and later the GPU context) is released.
+    direct: Option<crate::frame_handoff::FrameHandoff>,
     readback: crate::vulkan_readback::Nv12Readback,
     free: VecDeque<usize>,
     ptrs: Vec<usize>,
     frame_bytes: usize,
     pending: [Option<(u64, usize)>; 2],
     current_read: Option<usize>,
+}
+
+
+impl Nv12Pipe {
+    fn hand_off_completed(
+        &mut self,
+        index: u64,
+        read_slot: usize,
+        pipeline: Option<&FramePipeline>,
+    ) -> Result<(f64, f64)> {
+        if let Some(direct) = &mut self.direct {
+            direct.submit(index, read_slot).context("NV12 writer stopped")?;
+            return Ok((0., 0.));
+        }
+        let pipeline = pipeline.expect("copy handoff needs a frame pool");
+        let start = Instant::now();
+        let buf = pipeline.acquire_buf();
+        let wait = start.elapsed().as_secs_f64();
+        let start = Instant::now();
+        // The GPU fence for read_slot was consumed by the caller. Copy mode
+        // releases staging immediately and lends the CPU pool to the writer.
+        let src = unsafe { std::slice::from_raw_parts(self.ptrs[read_slot] as *const u8, self.frame_bytes) };
+        let dst = unsafe { std::slice::from_raw_parts_mut(pipeline.pool_addrs[buf] as *mut u8, self.frame_bytes) };
+        dst.copy_from_slice(src);
+        let copy = start.elapsed().as_secs_f64();
+        self.free.push_back(read_slot);
+        pipeline.push_job(buf);
+        Ok((wait, copy))
+    }
+
+    fn acquire_readback(&mut self) -> Result<(usize, f64)> {
+        if let Some(direct) = &mut self.direct {
+            let start = Instant::now();
+            let slot = direct.acquire_slot().context("NV12 writer stopped returning readback slots")?;
+            Ok((slot, start.elapsed().as_secs_f64()))
+        } else {
+            Ok((self.free.pop_front().expect("copy handoff exhausted readback slots"), 0.))
+        }
+    }
 }
 
 impl FramePipeline {
@@ -2432,7 +2473,7 @@ async fn render_impl(
                     free_rx,
                 }),
                 None,
-                writer,
+                Some(writer),
                 Some(encoder_thread),
                 None,
                 None,
@@ -2441,47 +2482,54 @@ async fn render_impl(
             let ptrs = readback.writer_ptrs();
             let frame_bytes = readback.frame_size();
             let slot_count = readback.slot_count();
-            let mut nv12_pipeline = FramePipeline::new(frame_bytes);
-
-            nv12_pipeline.finish_init();
-
-            let nv12_pipeline = std::sync::Arc::new(nv12_pipeline);
-            let mut stdin = ffmpeg_stdin.take().unwrap();
-            let shared = std::sync::Arc::clone(&nv12_pipeline);
-
-            let writer = std::thread::Builder::new()
-                .name("ffmpeg-writer".to_owned())
-                .spawn(move || -> std::io::Result<u64> {
-                    let mut busy: u64 = 0;
-                    while let Some(buf) = shared.pop_job() {
-
+            // The previous memcpy handoff remains available for same-binary
+            // measurements and drivers where direct mapped reads are slower.
+            let direct_mode = std::env::var("PHITK_NV12_HANDOFF")
+                .map_or(true, |mode| !mode.eq_ignore_ascii_case("copy"));
+            let (writer, direct, nv12_pipeline) = if direct_mode {
+                let stdin = ffmpeg_stdin.take().unwrap();
+                // Nv12Pipe owns the allocations and drops this RAII handoff
+                // first. submit is only called after the frame fence is waited.
+                let handoff = unsafe {
+                    crate::frame_handoff::FrameHandoff::new_mapped(ptrs.clone(), frame_bytes, stdin)
+                }.context("failed to spawn direct NV12 writer")?;
+                info!("NV12 handoff: direct mapped staging, {} slots", slot_count);
+                (None, Some(handoff), None)
+            } else {
+                let mut pipeline = FramePipeline::new(frame_bytes);
+                pipeline.finish_init();
+                let pipeline = std::sync::Arc::new(pipeline);
+                let mut stdin = ffmpeg_stdin.take().unwrap();
+                let shared = std::sync::Arc::clone(&pipeline);
+                let writer = std::thread::Builder::new()
+                    .name("ffmpeg-writer".to_owned())
+                    .spawn(move || -> std::io::Result<u64> {
+                        let mut busy: u64 = 0;
+                        while let Some(buf) = shared.pop_job() {
+                            let t = Instant::now();
+                            stdin.write_all(&shared.pool[buf])?;
+                            let d = t.elapsed().as_nanos() as u64;
+                            busy += d;
+                            shared.write_ns.fetch_add(d, Ordering::Relaxed);
+                            shared.write_count.fetch_add(1, Ordering::Relaxed);
+                            shared.write_max_ns.fetch_max(d, Ordering::Relaxed);
+                            shared.release_buf(buf);
+                        }
                         let t = Instant::now();
-                        stdin.write_all(&shared.pool[buf])?;
-                        let d = t.elapsed().as_nanos() as u64;
-
-                        busy += d;
-
-                        shared.write_ns.fetch_add(d, Ordering::Relaxed);
-                        shared.write_count.fetch_add(1, Ordering::Relaxed);
-                        shared.write_max_ns.fetch_max(d, Ordering::Relaxed);
-                        shared.release_buf(buf);
-
-                    }
-
-                    let t = Instant::now();
-
-                    stdin.flush()?;
-                    busy += t.elapsed().as_nanos() as u64;
-                    Ok(busy)
-
-                })
-                .context("failed to spawn ffmpeg writer thread")?;
+                        stdin.flush()?;
+                        busy += t.elapsed().as_nanos() as u64;
+                        Ok(busy)
+                    })
+                    .context("failed to spawn ffmpeg writer thread")?;
+                (Some(writer), None, Some(pipeline))
+            };
             (
                 None,
                 None,
                 writer,
                 None,
                 Some(Nv12Pipe {
+                    direct,
                     readback,
                     free: (0..slot_count).collect(),
                     ptrs,
@@ -2489,7 +2537,7 @@ async fn render_impl(
                     pending: std::array::from_fn(|_| None),
                     current_read: None,
                 }),
-                Some(nv12_pipeline),
+                nv12_pipeline,
             )
         } else {
             let mut pipeline = FramePipeline::new(frame_size);
@@ -2520,7 +2568,7 @@ async fn render_impl(
                     Ok(busy)
                 })
                 .context("failed to spawn ffmpeg writer thread")?;
-            (None, Some(pipeline), writer, None, None, None)
+            (None, Some(pipeline), Some(writer), None, None, None)
         };
 
     fn submit_frame(pipeline: &FramePipeline, target: &RenderTarget, frame_size: usize, ) -> Result<(f64, f64)> {
@@ -2591,30 +2639,13 @@ async fn render_impl(
                 let frame_slot = context.begin_offscreen_frame();
                 fence_wait_time += wait_start.elapsed().as_secs_f64();
 
-                if let Some((_index, read_slot)) = pipe.pending[frame_slot].take() {
-                    let pipeline = nv12_pipeline.as_ref().unwrap();
-                    let acquire_start = Instant::now();
-                    let buf = pipeline.acquire_buf();
-                    pool_wait_time += acquire_start.elapsed().as_secs_f64();
-                    let src = unsafe {
-                        std::slice::from_raw_parts(
-                            pipe.ptrs[read_slot] as *const u8,
-                            pipe.frame_bytes,
-                        )
-                    };
-                    let dst = unsafe {
-                        std::slice::from_raw_parts_mut(
-                            pipeline.pool_addrs[buf] as *mut u8,
-                            pipe.frame_bytes,
-                        )
-                    };
-                    let copy_start = Instant::now();
-                    dst.copy_from_slice(src);
-                    copy_time += copy_start.elapsed().as_secs_f64();
-                    pipe.free.push_back(read_slot);
-                    pipeline.push_job(buf);
+                if let Some((index, read_slot)) = pipe.pending[frame_slot].take() {
+                    let (wait, copy) = pipe.hand_off_completed(index, read_slot, nv12_pipeline.as_deref())?;
+                    pool_wait_time += wait;
+                    copy_time += copy;
                 }
-                let read_slot = pipe.free.pop_front().unwrap();
+                let (read_slot, wait) = pipe.acquire_readback()?;
+                pool_wait_time += wait;
                 pipe.current_read = Some(read_slot);
                 nv12_frame_slot = Some(frame_slot);
                 frame_slot
@@ -2708,41 +2739,28 @@ async fn render_impl(
     if let Some(pipeline) = &pipeline {
         pipeline.push_stop();
     }
+    let mut direct_stats = None;
     if let Some(pipe) = &mut nv12_pipe {
         let context = miniquad_context().vulkan_context().unwrap();
         context.wait_offscreen_idle();
-
-        if let Some(pipeline) = &nv12_pipeline {
-            for slot in 0..pipe.pending.len() {
-                if let Some((_index, read_slot)) = pipe.pending[slot].take() {
-                    let buf = pipeline.acquire_buf();
-                    let src = unsafe {
-                        std::slice::from_raw_parts(
-                            pipe.ptrs[read_slot] as *const u8,
-                            pipe.frame_bytes,
-                        )
-                    };
-                    let dst = unsafe {
-                        std::slice::from_raw_parts_mut(
-                            pipeline.pool_addrs[buf] as *mut u8,
-                            pipe.frame_bytes,
-                        )
-                    };
-                    let copy_start = Instant::now();
-
-                    dst.copy_from_slice(src);
-                    copy_time += copy_start.elapsed().as_secs_f64();
-                    pipe.free.push_back(read_slot);
-                    pipeline.push_job(buf);
-                }
-            }
+        for (index, read_slot) in crate::frame_handoff::take_pending(&mut pipe.pending) {
+            let (_, copy) = pipe.hand_off_completed(index, read_slot, nv12_pipeline.as_deref())?;
+            copy_time += copy;
+        }
+        if let Some(direct) = &mut pipe.direct {
+            direct_stats = Some(direct.finish().context("failed to finish direct NV12 writer")?);
+        } else if let Some(pipeline) = &nv12_pipeline {
             pipeline.push_stop();
         }
     }
-    let writer_busy = match writer.join() {
-        Ok(Ok(busy)) => busy as f64 / 1e9,
-        Ok(Err(err)) => bail!("failed to write frames to ffmpeg: {err}"),
-        Err(_) => bail!("ffmpeg writer thread panicked"),
+    let writer_busy = if let Some(writer) = writer {
+        match writer.join() {
+            Ok(Ok(busy)) => busy as f64 / 1e9,
+            Ok(Err(err)) => bail!("failed to write frames to ffmpeg: {err}"),
+            Err(_) => bail!("ffmpeg writer thread panicked"),
+        }
+    } else {
+        direct_stats.as_ref().expect("missing NV12 writer").write_ns as f64 / 1e9
     };
     let video_status = proc.wait()?;
     mark!("drain + finalize");
@@ -2800,6 +2818,12 @@ async fn render_impl(
             write_max_ns as f64 / 1e6,
             (writes as f64 * frame_bytes as f64) / (write_ns as f64 / 1e9).max(1e-9) / (1 << 20) as f64,
             backlog_at_end,
+        );
+    }
+    if let Some(stats) = direct_stats {
+        info!(
+            "NV12 direct handoff: {} frames | staging->pool copy 0.00s | writer {:.2}s inside write_all/flush (max {:.1}ms/frame)",
+            stats.frames, stats.write_ns as f64 / 1e9, stats.max_write_ns as f64 / 1e6,
         );
     }
     info!(
