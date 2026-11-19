@@ -1,6 +1,6 @@
 [package]
 name = "phi-tk-cli"
-version = "1.2.2"
+version = "1.2.3"
 edition = "2024"
 
 [[bin]]
@@ -32,7 +32,7 @@ anyhow = { version = "1.0.70", features = ["backtrace"] }
 #prpr = { git = "https://github.com/CMDBookDevelope/Phi-TKC-render-lib", package = "prpr", branch = "render-lib" }
 #macroquad = { git = "https://github.com/CMDBookDevelope/prpr-macroquad", default-features = false }
 macroquad = { git = "https://github.com/CMDBookDevelope/prpr-macroquad", default-features = false }
-prpr = { git = "https://github.com/CMDBookDevelope/Phi-TKC-render-lib", package = "prpr", branch = "render-lib" }
+prpr = { git = "https://github.com/CMDBookDevelope/Phi-TKC-render-lib", package = "prpr", rev = "b33fe6c11f76288985b50e0aa9d1efc625d3978b" }
 phi-tk-mini-lib = { path = "mini-lib" }
 
 #sasa = {path = "/home/link/sasa"}

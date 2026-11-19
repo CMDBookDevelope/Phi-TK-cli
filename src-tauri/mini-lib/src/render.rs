@@ -1325,9 +1325,11 @@ async fn render_impl(
     };
     let nv12_mode = ffmpeg_nv12.is_some();
     let mst_count = if nv12_mode { 2 } else { 1 };
-    let msts: Vec<Rc<MSRenderTarget>> = (0..mst_count)
-        .map(|_| Rc::new(MSRenderTarget::new((vw, vh), config.sample_count)))
-        .collect();
+    let msts: Rc<RefCell<Vec<MSRenderTarget>>> = Rc::new(RefCell::new(
+        (0..mst_count)
+            .map(|_| MSRenderTarget::new((vw, vh), config.sample_count))
+            .collect(),
+    ));
     let mst_slot = Rc::new(Cell::new(0usize));
     let my_time: Rc<RefCell<f64>> = Rc::new(RefCell::new(0.));
     let tm = TimeManager::manual(Box::new({
@@ -1352,9 +1354,8 @@ async fn render_impl(
         ),
         tm,
         {
-            let msts = Rc::new(msts.iter().cloned().collect::<Vec<_>>());
             let mst_slot = Rc::clone(&mst_slot);
-            move || Some(msts[mst_slot.get()].input())
+            move || Some(msts.borrow()[mst_slot.get()].input())
         },
     )
         .await?;
@@ -2653,7 +2654,11 @@ async fn render_impl(
                 0
             };
             mst_slot.set(mst_index);
-            let input = msts[mst_index].input();
+            let input = {
+                let mut msts = msts.borrow_mut();
+                msts[mst_index].begin_frame();
+                msts[mst_index].input()
+            };
             gl.quad_gl.render_pass(Some(input.render_pass));
         }
         // Frame 0 was already updated by the pre-roll above.
@@ -2684,7 +2689,7 @@ async fn render_impl(
                 let context = miniquad_context().vulkan_context().unwrap();
                 let yuv = &yuvs[frame_slot];
                 let convert_start = Instant::now();
-                yuv.convert(&msts[frame_slot].output());
+                yuv.convert(&msts.borrow()[frame_slot].output());
                 yuv_convert_time += convert_start.elapsed().as_secs_f64();
                 let submit_start = Instant::now();
                 context.record_yuv_copy_to_staging(
@@ -2708,7 +2713,7 @@ async fn render_impl(
                 .unwrap();
             slot_wait_time += wait_start.elapsed().as_secs_f64();
             if let Some(yuv) = yuvs.first() {
-                yuv.convert(&msts[0].output());
+                yuv.convert(&msts.borrow()[0].output());
                 {
                     let context = miniquad_context().vulkan_context().unwrap();
                     context.copy_nv12_from_textures(
@@ -2722,7 +2727,11 @@ async fn render_impl(
             }
         } else {
             let (dma, pool) =
-                submit_frame(pipeline.as_ref().unwrap(), &msts[0].output(), frame_size)?;
+                submit_frame(
+                    pipeline.as_ref().unwrap(),
+                    &msts.borrow()[0].output(),
+                    frame_size,
+                )?;
             dma_wait_time += dma;
             pool_wait_time += pool;
         }

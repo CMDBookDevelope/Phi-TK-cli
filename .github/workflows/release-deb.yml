@@ -88,15 +88,18 @@ jobs:
 
       - name: Resolve version
         id: version
+        env:
+          VERSION_INPUT: ${{ inputs.version }}
+          LC_ALL: C
         run: |
           set -euo pipefail
-          version="${{ inputs.version }}"
+          version="$VERSION_INPUT"
           if [ -z "$version" ]; then
             version="$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')"
           fi
           # Debian versions must start with a digit; keep it to a sane alphabet.
-          if ! printf '%s' "$version" | grep -Eq '^[0-9][0-9A-Za-z.+~-]*$'; then
-            echo "::error::invalid version '$version' (Debian versions must start with a digit)"
+          if [[ ! "$version" =~ ^[0-9][0-9A-Za-z.+~-]*$ ]]; then
+            echo "::error::Invalid release version. Use a digit followed by letters, digits, dots, plus, tilde, or hyphens."
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
