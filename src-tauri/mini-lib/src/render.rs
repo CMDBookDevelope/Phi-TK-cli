@@ -1354,8 +1354,9 @@ async fn render_impl(
         ),
         tm,
         {
+            let input_msts = Rc::clone(&msts);
             let mst_slot = Rc::clone(&mst_slot);
-            move || Some(msts.borrow()[mst_slot.get()].input())
+            move || Some(input_msts.borrow()[mst_slot.get()].input())
         },
     )
         .await?;
